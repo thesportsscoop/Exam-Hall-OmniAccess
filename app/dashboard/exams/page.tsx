@@ -1,53 +1,111 @@
+'use client';
+
+import { useState, useEffect } from 'react';
 import { redirect } from 'next/navigation';
 import Link from 'next/link';
-import dbConnect from '@/lib/mongodb';
-import Exam from '@/models/Exam';
-import Submission from '@/models/Submission';
-import { getAuthUser } from '@/lib/auth';
+import toast from 'react-hot-toast';
 
-async function getTeacherExams(teacherId: string) {
-  await dbConnect();
-
-  const exams = await Exam.find({ teacherId })
-    .sort({ createdAt: -1 })
-    .lean();
-
-  return Promise.all(
-    exams.map(async (exam: any) => {
-      const submissionCount = await Submission.countDocuments({ examId: exam._id });
-      const now = new Date();
-      let status = 'upcoming';
-      if (now >= new Date(exam.startTime) && now <= new Date(exam.endTime)) {
-        status = 'active';
-      } else if (now > new Date(exam.endTime)) {
-        status = 'ended';
-      }
-      return {
-        _id: exam._id.toString(),
-        title: exam.title,
-        format: exam.format,
-        durationMinutes: exam.durationMinutes,
-        startTime: exam.startTime,
-        endTime: exam.endTime,
-        passkey: exam.passkey,
-        classes: exam.classes,
-        isPaid: exam.isPaid,
-        isActive: exam.isActive,
-        submissionCount,
-        status,
-        createdAt: exam.createdAt,
-      };
-    })
-  );
+interface Exam {
+  _id: string;
+  title: string;
+  format: string;
+  durationMinutes: number;
+  startTime: string;
+  endTime: string;
+  passkey: string;
+  isPaid: boolean;
+  submissionCount: number;
+  status: string;
 }
 
-export default async function TeacherExams() {
-  const decoded = await getAuthUser();
-  if (!decoded || typeof decoded === 'string' || decoded.role !== 'teacher') {
-    redirect('/login');
-  }
+export default function TeacherExamsPage() {
+  const [exams, setExams] = useState<Exam[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingExam, setEditingExam] = useState<Exam | null>(null);
+  const [submitting, setSubmitting] = useState(false);
 
-  const exams = await getTeacherExams(decoded.id);
+  useEffect(() => {
+    fetchExams();
+  }, []);
+
+  const fetchExams = async () => {
+    try {
+      const res = await fetch('/api/teacher/exams');
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to load exams');
+        return;
+      }
+      setExams(data.exams);
+    } catch (error) {
+      toast.error('Failed to load exams');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEdit = (exam: Exam) => {
+    setEditingExam(exam);
+  };
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingExam) return;
+    setSubmitting(true);
+
+    try {
+      const res = await fetch(`/api/teacher/exams/${editingExam._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(editingExam),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to update exam');
+        return;
+      }
+
+      toast.success('Exam updated successfully');
+      setEditingExam(null);
+      fetchExams();
+    } catch (error) {
+      toast.error('Failed to update exam');
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handleDelete = async (examId: string) => {
+    if (!confirm('Are you sure? This will delete the exam and all questions permanently.')) {
+      return;
+    }
+
+    try {
+      const res = await fetch(`/api/teacher/exams/${examId}`, {
+        method: 'DELETE',
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to delete exam');
+        return;
+      }
+
+      toast.success('Exam deleted');
+      fetchExams();
+    } catch (error) {
+      toast.error('Failed to delete exam');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="animate-spin w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full"></div>
+      </div>
+    );
+  }
 
   const statusBadge = (status: string) => {
     const colors: Record<string, string> = {
@@ -56,6 +114,11 @@ export default async function TeacherExams() {
       ended: 'bg-gray-100 text-gray-800',
     };
     return colors[status] || 'bg-gray-100 text-gray-800';
+  };
+
+  const updateExamField = (field: keyof Exam, value: any) => {
+    if (!editingExam) return;
+    setEditingExam({ ...editingExam, [field]: value });
   };
 
   return (
@@ -138,17 +201,148 @@ export default async function TeacherExams() {
                       )}
                     </td>
                     <td className="px-6 py-4 text-sm">
-                      <Link
-                        href={`/dashboard/exams/${exam._id}`}
-                        className="text-blue-600 hover:text-blue-800 font-medium"
-                      >
-                        Manage
-                      </Link>
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleEdit(exam)}
+                          className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => handleDelete(exam._id)}
+                          className="text-red-600 hover:text-red-800 font-medium"
+                        >
+                          Delete
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Modal */}
+      {editingExam && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-2xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <h3 className="text-lg font-semibold text-gray-900">Edit Exam</h3>
+              <button
+                onClick={() => setEditingExam(null)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdate} className="p-6 space-y-4">
+              <div>
+                <label className="label">Exam Title</label>
+                <input
+                  type="text"
+                  className="input mt-1"
+                  value={editingExam.title}
+                  onChange={(e) => updateExamField('title', e.target.value)}
+                  required
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Duration (minutes)</label>
+                  <input
+                    type="number"
+                    className="input mt-1"
+                    value={editingExam.durationMinutes}
+                    onChange={(e) => updateExamField('durationMinutes', parseInt(e.target.value) || 0)}
+                    required
+                    min={1}
+                  />
+                </div>
+                <div>
+                  <label className="label">Format</label>
+                  <select
+                    className="input mt-1"
+                    value={editingExam.format}
+                    onChange={(e) => updateExamField('format', e.target.value)}
+                  >
+                    <option value="mcq">MCQ</option>
+                    <option value="essay">Essay</option>
+                    <option value="hybrid">Hybrid</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="label">Start Time</label>
+                  <input
+                    type="datetime-local"
+                    className="input mt-1"
+                    value={editingExam.startTime.slice(0, 16)}
+                    onChange={(e) => updateExamField('startTime', e.target.value)}
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="label">End Time</label>
+                  <input
+                    type="datetime-local"
+                    className="input mt-1"
+                    value={editingExam.endTime.slice(0, 16)}
+                    onChange={(e) => updateExamField('endTime', e.target.value)}
+                    required
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="label">Passkey</label>
+                <input
+                  type="text"
+                  className="input mt-1"
+                  value={editingExam.passkey}
+                  onChange={(e) => updateExamField('passkey', e.target.value.toUpperCase())}
+                  required
+                  minLength={4}
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="isPaid"
+                  checked={editingExam.isPaid}
+                  onChange={(e) => updateExamField('isPaid', e.target.checked)}
+                  className="w-4 h-4 text-blue-600"
+                />
+                <label htmlFor="isPaid" className="text-sm text-gray-700">
+                  Payment completed
+                </label>
+              </div>
+
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setEditingExam(null)}
+                  className="btn btn-outline flex-1"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submitting}
+                  className="btn btn-primary flex-1"
+                >
+                  {submitting ? 'Saving...' : 'Save Changes'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
