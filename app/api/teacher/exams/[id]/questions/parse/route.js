@@ -77,7 +77,6 @@ function extractSections(lines) {
 }
 
 function detectTableFormat(lines) {
-  // Check first few non-empty lines for tabular structure
   const checkLines = lines.slice(0, Math.min(15, lines.length));
   
   let tabCount = 0;
@@ -90,10 +89,8 @@ function detectTableFormat(lines) {
     if (line.includes(';')) semicolonCount++;
   }
   
-  // If more than half the lines have tabs, it's a table
   if (tabCount > checkLines.length * 0.4) return true;
   
-  // Check for header row with common table headers
   const headerPattern = /(no|question|answer|option|a\s|b\s|c\s|d\s)/i;
   for (const line of checkLines) {
     if (headerPattern.test(line) && (line.includes('\t') || line.includes(','))) {
@@ -105,7 +102,6 @@ function detectTableFormat(lines) {
 }
 
 function parseTableFormat(lines, result) {
-  // Detect delimiter
   let delimiter = '\t';
   const tabCount = lines.filter(l => l.includes('\t')).length;
   const commaCount = lines.filter(l => l.includes(',')).length;
@@ -114,7 +110,6 @@ function parseTableFormat(lines, result) {
   if (commaCount > tabCount) delimiter = ',';
   if (semicolonCount > commaCount && semicolonCount > tabCount) delimiter = ';';
   
-  // Find header row
   let headerIndex = -1;
   const headerKeywords = ['no', 'question', 'answer', 'option'];
   
@@ -126,7 +121,6 @@ function parseTableFormat(lines, result) {
     }
   }
   
-  // Find answer key section
   let answerKeyIndex = lines.length;
   for (let i = Math.max(headerIndex + 1, 0); i < lines.length; i++) {
     const lower = lines[i].toLowerCase();
@@ -136,7 +130,6 @@ function parseTableFormat(lines, result) {
     }
   }
   
-  // Parse data rows
   const dataRows = [];
   const startRow = headerIndex >= 0 ? headerIndex + 1 : 0;
   
@@ -152,7 +145,6 @@ function parseTableFormat(lines, result) {
     }
   }
   
-  // Parse answer key
   const answerMap = {};
   for (let i = answerKeyIndex; i < lines.length; i++) {
     const parts = lines[i].split(delimiter).map(s => s.trim());
@@ -161,7 +153,6 @@ function parseTableFormat(lines, result) {
     }
   }
   
-  // Build questions
   for (const row of dataRows) {
     const answer = answerMap[row.number] || row.answer || 'A';
     const optionLabels = ['A', 'B', 'C', 'D'];
@@ -192,38 +183,37 @@ function parseNaturalLanguage(lines, sections, result) {
   const answerKeyEndLine = answerKeyData.endLine;
   
   // Step 2: Determine the effective lines to parse for questions
-  const questionLines = answerKeyEndLine < lines.length 
-    ? lines.slice(0, answerKeyEndLine) 
-    : lines;
+  const questionLines = lines.slice(0, answerKeyEndLine);
   
-  // Step 3: Parse questions from the text
+  // Step 3: Pre-process lines to merge "Question N" headers with their content
+  const processedLines = preProcessQuestionHeaders(questionLines);
+  
+  // Step 4: Parse questions from the processed text
   let i = 0;
   let questionNumber = 0;
-  let currentSectionIndex = 0;
   
-  // Skip introductory/instruction lines at the start
-  while (i < questionLines.length) {
-    const line = questionLines[i].trim();
+  while (i < processedLines.length) {
+    const line = processedLines[i].trim();
     
-    // Skip section headers (already processed)
+    // Skip section headers
     if (/^section\s+/i.test(line)) {
       i++;
       continue;
     }
     
-    // Skip instruction lines (short lines without question patterns)
-    if (isInstructionLine(line, questionLines, i)) {
+    // Skip instruction lines
+    if (isInstructionLine(line)) {
       i++;
       continue;
     }
     
-    // Try to parse an MCQ question
-    const mcqResult = tryParseMCQ(questionLines, i);
+    // Try to parse an MCQ question (UPPERCASE A-D options)
+    const mcqResult = tryParseMCQ(processedLines, i);
     if (mcqResult) {
       questionNumber++;
-      const section = getCurrentSection(sections, i);
+      const section = getCurrentSection(sections, findOriginalLineIndex(lines, processedLines[i]));
       const points = section && section.mcqMarks > 0 
-        ? Math.max(1, Math.floor(section.mcqMarks / estimateQuestionCount(questionLines, sections, 'mcq')))
+        ? Math.max(1, Math.floor(section.mcqMarks / estimateQuestionCount(processedLines, sections, 'mcq')))
         : 1;
       
       const answer = answerMap[questionNumber.toString()] || answerMap[mcqResult.number] || '';
@@ -232,7 +222,7 @@ function parseNaturalLanguage(lines, sections, result) {
         type: 'mcq',
         questionText: mcqResult.questionText,
         options: mcqResult.options,
-        correctAnswer: answer || mcqResult.options[0]?.label || 'A',
+        correctAnswer: answer || 'A',
         points: points,
         markingScheme: '',
       });
@@ -242,13 +232,13 @@ function parseNaturalLanguage(lines, sections, result) {
       continue;
     }
     
-    // Try to parse an essay question
-    const essayResult = tryParseEssay(questionLines, i);
+    // Try to parse an essay question (lowercase a-e sub-questions or "Question N" header)
+    const essayResult = tryParseEssay(processedLines, i);
     if (essayResult) {
       questionNumber++;
-      const section = getCurrentSection(sections, i);
+      const section = getCurrentSection(sections, findOriginalLineIndex(lines, processedLines[i]));
       const points = section && section.essayMarks > 0
-        ? Math.max(1, Math.floor(section.essayMarks / estimateQuestionCount(questionLines, sections, 'essay')))
+        ? Math.max(1, Math.floor(section.essayMarks / estimateQuestionCount(processedLines, sections, 'essay')))
         : 5;
       
       const markingScheme = generateMarkingScheme(essayResult, points);
@@ -270,7 +260,7 @@ function parseNaturalLanguage(lines, sections, result) {
     i++;
   }
   
-  // If no questions were found with sections, try a more aggressive parse
+  // If no questions were found, try aggressive parse
   if (result.mcqQuestions.length === 0 && result.essayQuestions.length === 0) {
     return parseAggressive(lines, answerMap, result);
   }
@@ -278,11 +268,67 @@ function parseNaturalLanguage(lines, sections, result) {
   return result;
 }
 
-function isInstructionLine(line, lines, index) {
+function preProcessQuestionHeaders(lines) {
+  // Merge "Question N" header lines with the following sub-questions
+  const result = [];
+  let i = 0;
+  
+  while (i < lines.length) {
+    const line = lines[i].trim();
+    const questionMatch = line.match(/^question\s+(\d+)\s*[:.\-]?\s*(.*)/i);
+    
+    if (questionMatch) {
+      const questionNum = questionMatch[1];
+      const questionTitle = questionMatch[2].trim();
+      
+      // Look ahead to see if there are sub-questions (a, b, c) following
+      let nextIdx = i + 1;
+      let hasSubQuestions = false;
+      
+      while (nextIdx < lines.length) {
+        const nextLine = lines[nextIdx].trim();
+        if (/^\(?[a-e]\s*[)\].\s]\s*.+/i.test(nextLine)) {
+          hasSubQuestions = true;
+          nextIdx++;
+        } else {
+          break;
+        }
+      }
+      
+      if (hasSubQuestions) {
+        // Merge the "Question N" header with the sub-questions
+        let mergedText = questionTitle || `Question ${questionNum}`;
+        for (let j = i + 1; j < nextIdx; j++) {
+          mergedText += '\n' + lines[j].trim();
+        }
+        result.push(mergedText);
+        i = nextIdx;
+      } else {
+        result.push(line);
+        i++;
+      }
+    } else {
+      result.push(line);
+      i++;
+    }
+  }
+  
+  return result;
+}
+
+function findOriginalLineIndex(originalLines, processedLine) {
+  // Find the approximate original line index for a processed line
+  for (let i = 0; i < originalLines.length; i++) {
+    if (originalLines[i].trim() === processedLine) return i;
+  }
+  return 0;
+}
+
+function isInstructionLine(line) {
   const trimmed = line.trim();
   
   // Skip very short lines that aren't options
-  if (trimmed.length < 10 && !/^[A-Da-d][)\].\s-]/.test(trimmed)) return true;
+  if (trimmed.length < 10 && !/^[A-D]\s*[)\].\s\-:]/.test(trimmed)) return true;
   
   // Skip common instruction patterns
   const instructionPatterns = [
@@ -308,9 +354,11 @@ function tryParseMCQ(lines, startIndex) {
   
   const firstLine = lines[startIndex].trim();
   
-  // Check if this line looks like a question (starts with a number or is a question)
+  // A line is a candidate MCQ question if it:
+  // 1. Starts with a number (e.g., "1. What is...")
+  // 2. Is a long sentence (>= 15 chars) with a question mark or is long enough (>= 20 chars)
   const hasQuestionNumber = /^\d+[.)\s]/.test(firstLine);
-  const isQuestionText = firstLine.length > 15 && (firstLine.includes('?') || firstLine.length > 20);
+  const isQuestionText = firstLine.length >= 15 && (firstLine.includes('?') || firstLine.length >= 20);
   
   if (!hasQuestionNumber && !isQuestionText) return null;
   
@@ -327,14 +375,15 @@ function tryParseMCQ(lines, startIndex) {
   }
   
   // Look for options in the next lines
+  // MCQ options MUST be UPPERCASE A-D (not lowercase a-e which are essay sub-questions)
   const options = [];
   let nextIndex = startIndex + 1;
   
   while (nextIndex < lines.length) {
     const line = lines[nextIndex].trim();
     
-    // Check if this line is an option (A) text, B. text, C - text, D: text, etc.)
-    const optionMatch = line.match(/^([A-Da-d])\s*[)\].\s\-:]\s*(.+)/);
+    // Match UPPERCASE options: A) text, B. text, C - text, D: text
+    const optionMatch = line.match(/^([A-D])\s*[)\].\s\-:]\s*(.+)/);
     
     if (optionMatch) {
       options.push({
@@ -350,8 +399,13 @@ function tryParseMCQ(lines, startIndex) {
   // Must have at least 2 options to be a valid MCQ
   if (options.length < 2) return null;
   
-  // Check if the next non-option line starts a new question or is a section/instruction
-  // If it looks like a new question, stop here
+  // Check that options are properly labeled (A, B, C, D in sequence)
+  const expectedLabels = ['A', 'B', 'C', 'D', 'E'];
+  for (let j = 0; j < options.length; j++) {
+    if (options[j].label !== expectedLabels[j]) {
+      return null; // Not sequential labels, likely not an MCQ
+    }
+  }
   
   return {
     number: questionNumber,
@@ -366,11 +420,15 @@ function tryParseEssay(lines, startIndex) {
   
   const firstLine = lines[startIndex].trim();
   
-  // Essay questions typically have sub-questions (a), b), c)) or are longer text
+  // Essay questions typically have:
+  // 1. Starts with a number and has sub-questions (a, b, c)
+  // 2. Has sub-questions starting with lowercase a-e
+  // 3. Is a longer text (> 30 chars) without MCQ options
   const hasQuestionNumber = /^\d+[.)\s]/.test(firstLine);
   const isLongText = firstLine.length > 30;
+  const startsWithSubQuestion = /^\(?[a-e]\s*[)\].\s]\s*.+/i.test(firstLine) && firstLine.length > 20;
   
-  if (!hasQuestionNumber && !isLongText) return null;
+  if (!hasQuestionNumber && !isLongText && !startsWithSubQuestion) return null;
   
   // Extract question number and text
   let questionNumber = '';
@@ -384,7 +442,7 @@ function tryParseEssay(lines, startIndex) {
     }
   }
   
-  // Look for sub-questions (a), b), c) etc.) or additional text
+  // Look for sub-questions (lowercase a-e) or additional text
   const subQuestions = [];
   let nextIndex = startIndex + 1;
   let hasSubQuestions = false;
@@ -393,7 +451,8 @@ function tryParseEssay(lines, startIndex) {
     const line = lines[nextIndex].trim();
     
     // Check for sub-question pattern: a) text, b. text, (c) text, etc.
-    const subMatch = line.match(/^\(?([a-e])\s*[)\].\s]\s*(.+)/i);
+    // LOWERCASE a-e (not uppercase A-D which are MCQ options)
+    const subMatch = line.match(/^\(?([a-e])\s*[)\].\s]\s*(.+)/);
     
     if (subMatch) {
       hasSubQuestions = true;
@@ -403,13 +462,12 @@ function tryParseEssay(lines, startIndex) {
       });
       nextIndex++;
     } 
-    // Check if this is a continuation of the question text (no option pattern)
-    else if (!/^[A-Da-d]\s*[)\].\s\-:]/.test(line) && 
+    // Check if this is a continuation of the question text
+    else if (!/^[A-D]\s*[)\].\s\-:]/.test(line) && 
              !/^\d+[.)\s]/.test(line) &&
              !/^section\s+/i.test(line) &&
              line.length > 10 &&
              nextIndex - startIndex < 4) {
-      // Append to question text
       questionText += ' ' + line;
       nextIndex++;
     } 
@@ -457,40 +515,49 @@ function extractAnswerKey(lines) {
     const line = lines[i].trim();
     if (!line) continue;
     
-    // Skip header lines in answer key
+    // Skip header lines in answer key (like "QAnsQAnsQAnsQAns")
     if (/^(q|no|question|answer)/i.test(line) && /[a-d]/i.test(line)) continue;
+    // Skip lines that don't contain any digits (like decorative headers)
+    if (!/\d/.test(line)) continue;
     
-    // Format 1: Packed format like "1B11C21B31A" or "1 B 11 C 21 B 31 A"
-    const packedMatch = line.match(/(\d+)\s*([A-Da-d])\s*(\d+)\s*([A-Da-d])\s*(\d+)\s*([A-Da-d])\s*(\d+)\s*([A-Da-d])/);
-    if (packedMatch) {
-      for (let j = 0; j < 4; j++) {
-        const num = packedMatch[1 + j * 2];
-        const ans = packedMatch[2 + j * 2].toUpperCase();
+    // Format 1: Packed format like "1B11C21B31A" or "10A20C" - variable number of pairs
+    // Extract all digit+letter pairs from the line
+    const pairs = [];
+    let remaining = line;
+    const pairRegex = /(\d+)\s*([A-Da-d])\s*/g;
+    let pairMatch;
+    while ((pairMatch = pairRegex.exec(line)) !== null) {
+      const num = pairMatch[1];
+      const ans = pairMatch[2].toUpperCase();
+      // Only add if the number is reasonable (1-999)
+      if (parseInt(num) >= 1 && parseInt(num) <= 999) {
         answerMap[num] = ans;
       }
-      continue;
     }
     
-    // Format 2: "Q1 B" or "1. B" or "1 B" or "1-B"
-    const qaMatch = line.match(/^(?:Q|q)?\s*(\d+)\s*[.)\s\-]?\s*([A-Da-d])\s*$/);
-    if (qaMatch) {
-      answerMap[qaMatch[1]] = qaMatch[2].toUpperCase();
-      continue;
-    }
-    
-    // Format 3: Table format "1\tB" or "1,B"
-    const tableMatch = line.match(/^(\d+)\s*[,;\t]\s*([A-Da-d])/);
-    if (tableMatch) {
-      answerMap[tableMatch[1]] = tableMatch[2].toUpperCase();
-      continue;
-    }
-    
-    // Format 4: Just a letter on its own (sequential)
-    const justLetter = line.match(/^([A-Da-d])\s*$/);
-    if (justLetter) {
-      const nextNum = Object.keys(answerMap).length + 1;
-      answerMap[nextNum.toString()] = justLetter[1].toUpperCase();
-      continue;
+    // If no pairs matched, try other formats for this line
+    if (!pairs.length) {
+      // Format 2: "Q1 B" or "1. B" or "1 B" or "1-B"
+      const qaMatch = line.match(/^(?:Q|q)?\s*(\d+)\s*[.)\s\-]?\s*([A-Da-d])\s*$/);
+      if (qaMatch) {
+        answerMap[qaMatch[1]] = qaMatch[2].toUpperCase();
+        continue;
+      }
+      
+      // Format 3: Table format "1\tB" or "1,B"
+      const tableMatch = line.match(/^(\d+)\s*[,;\t]\s*([A-Da-d])/);
+      if (tableMatch) {
+        answerMap[tableMatch[1]] = tableMatch[2].toUpperCase();
+        continue;
+      }
+      
+      // Format 4: Just a letter on its own (sequential)
+      const justLetter = line.match(/^([A-Da-d])\s*$/);
+      if (justLetter) {
+        const nextNum = Object.keys(answerMap).length + 1;
+        answerMap[nextNum.toString()] = justLetter[1].toUpperCase();
+        continue;
+      }
     }
   }
   
@@ -515,15 +582,13 @@ function getCurrentSection(sections, lineIndex) {
 }
 
 function estimateQuestionCount(lines, sections, type) {
-  // Count how many questions of the given type appear in the text
   let count = 0;
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i].trim();
     if (/^\d+[.)\s]/.test(line)) {
-      // Check if next lines have options (MCQ) or not (Essay)
       let hasOptions = false;
       for (let j = i + 1; j < Math.min(i + 6, lines.length); j++) {
-        if (/^[A-Da-d]\s*[)\].\s\-:]/.test(lines[j].trim())) {
+        if (/^[A-D]\s*[)\].\s\-:]/.test(lines[j].trim())) {
           hasOptions = true;
           break;
         }
@@ -540,7 +605,6 @@ function generateMarkingScheme(essayData, totalPoints) {
   const subCount = essayData.subQuestions.length;
   
   if (subCount > 0) {
-    // Distribute points across sub-questions
     const pointsPerSub = Math.floor(totalPoints / subCount);
     const remainder = totalPoints - (pointsPerSub * subCount);
     
@@ -563,7 +627,6 @@ function generateMarkingScheme(essayData, totalPoints) {
     return scheme;
   }
   
-  // Single essay question
   return `Marking Scheme (Total: ${totalPoints} marks):\n\n` +
     `Expected Key Points:\n` +
     `- Award marks for each correct key point mentioned\n` +
@@ -577,20 +640,17 @@ function generateMarkingScheme(essayData, totalPoints) {
 }
 
 function parseAggressive(lines, answerMap, result) {
-  // Aggressive parsing: try to extract any question-like patterns
   let i = 0;
   let questionNumber = 0;
   
   while (i < lines.length) {
     const line = lines[i].trim();
     
-    // Skip section headers, instructions, short lines
     if (/^section\s+/i.test(line) || line.length < 10) {
       i++;
       continue;
     }
     
-    // Try MCQ first
     const mcqResult = tryParseMCQ(lines, i);
     if (mcqResult) {
       questionNumber++;
@@ -600,7 +660,7 @@ function parseAggressive(lines, answerMap, result) {
         type: 'mcq',
         questionText: mcqResult.questionText,
         options: mcqResult.options,
-        correctAnswer: answer || mcqResult.options[0]?.label || 'A',
+        correctAnswer: answer || 'A',
         points: 1,
         markingScheme: '',
       });
@@ -610,7 +670,6 @@ function parseAggressive(lines, answerMap, result) {
       continue;
     }
     
-    // Try essay
     const essayResult = tryParseEssay(lines, i);
     if (essayResult) {
       questionNumber++;
@@ -674,15 +733,6 @@ export async function POST(request, { params }) {
         },
         { status: 400 }
       );
-    }
-
-    // Determine final format based on exam and parsed content
-    let finalFormat = examFormat || exam.format;
-    if (finalFormat === 'hybrid') {
-      // Keep hybrid - both MCQ and essay are allowed
-    } else if (finalFormat === 'mcq' && parsed.essayQuestions.length > 0) {
-      // Exam is MCQ but essay questions were found - still save them as essay type
-      // The exam format stays as-is, individual questions have their own type
     }
 
     // Save questions to database

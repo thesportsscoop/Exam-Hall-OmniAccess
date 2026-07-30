@@ -56,6 +56,11 @@ export default function ExamManagePage() {
   const [showBulkImport, setShowBulkImport] = useState(false);
   const [bulkText, setBulkText] = useState('');
   const [importing, setImporting] = useState(false);
+  const [importTab, setImportTab] = useState<'paste' | 'upload' | 'generate'>('paste');
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const [generatePrompt, setGeneratePrompt] = useState('');
+  const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
     fetchExamData();
@@ -522,13 +527,13 @@ export default function ExamManagePage() {
           <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mt-12 mb-12">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
-                <h3 className="text-lg font-semibold text-gray-900">Bulk Import Questions</h3>
+                <h3 className="text-lg font-semibold text-gray-900">Add Questions</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Paste your questions in any format. The AI will automatically detect and structure them — including natural language, tabular data (CSV/TSV), sections with marks, and answer keys.
+                  Choose a method to add questions to your exam.
                 </p>
               </div>
               <button
-                onClick={() => { setShowBulkImport(false); setBulkText(''); }}
+                onClick={() => { setShowBulkImport(false); setBulkText(''); setUploadedFile(null); setGeneratePrompt(''); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -537,49 +542,275 @@ export default function ExamManagePage() {
               </button>
             </div>
 
+            {/* Tab Navigation */}
+            <div className="flex border-b border-gray-200 px-6">
+              <button
+                onClick={() => setImportTab('paste')}
+                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  importTab === 'paste'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4" />
+                  </svg>
+                  Paste Text
+                </span>
+              </button>
+              <button
+                onClick={() => setImportTab('upload')}
+                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  importTab === 'upload'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                  </svg>
+                  Upload File
+                </span>
+              </button>
+              <button
+                onClick={() => setImportTab('generate')}
+                className={`py-3 px-4 text-sm font-medium border-b-2 transition-colors ${
+                  importTab === 'generate'
+                    ? 'border-blue-500 text-blue-600'
+                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                }`}
+              >
+                <span className="flex items-center gap-2">
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                  </svg>
+                  Generate
+                </span>
+              </button>
+            </div>
+
             <div className="p-6">
-              <textarea
-                rows={15}
-                className="input w-full min-h-[300px] font-mono text-xs"
-                placeholder={`Paste your questions here in any of these formats:
+              {/* Tab 1: Paste Text */}
+              {importTab === 'paste' && (
+                <>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Paste your questions in any format. The system will automatically detect and structure them — including natural language, tabular data (CSV/TSV), sections with marks, and answer keys.
+                  </p>
+                  <textarea
+                    rows={12}
+                    className="input w-full min-h-[250px] font-mono text-xs"
+                    placeholder={`Paste your questions here. Examples:
 
-Format 1 - TSV/CSV Table:
-No.	Question	A	B	C	D	Answer
-1	What is 2+2?	3	4	5	6	B
-2	Capital of France?	London	Paris	Berlin	Madrid	B
+Natural Language Format:
+1. Which organ produces sperm?
+A) Penis
+B) Testis
+C) Prostate gland
+D) Scrotum
 
-Format 2 - With Answer Key at bottom:
-1. What is science? Option A Option B Option C Option D
-2. Another question?
+Section Format:
+Section A: Multiple Choice Questions (40 Marks)
+1. What is 2+2?
+A) 3
+B) 4
+C) 5
+D) 6
+
 Answer Key:
-B
-B
+1B 2C 3A 4D
 
-The parser will automatically detect format and import all questions.`}
-                value={bulkText}
-                onChange={(e) => setBulkText(e.target.value)}
-              />
+Essay Format:
+Question 1
+a) Define reproduction
+b) Name three organs
+c) State two characteristics`}
+                    value={bulkText}
+                    onChange={(e) => setBulkText(e.target.value)}
+                  />
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      {bulkText.split('\n').filter(l => l.trim()).length} lines · {bulkText.length} characters
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => { setShowBulkImport(false); setBulkText(''); }}
+                        className="btn btn-outline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={handleBulkImport}
+                        disabled={importing || !bulkText.trim()}
+                        className="btn btn-primary"
+                      >
+                        {importing ? 'Importing...' : 'Import Questions'}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
 
-              <div className="mt-4 flex items-center justify-between">
-                <p className="text-xs text-gray-500">
-                  {bulkText.split('\n').filter(l => l.trim()).length} lines · {bulkText.length} characters
-                </p>
-                <div className="flex gap-3">
-                  <button
-                    onClick={() => { setShowBulkImport(false); setBulkText(''); }}
-                    className="btn btn-outline"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    onClick={handleBulkImport}
-                    disabled={importing || !bulkText.trim()}
-                    className="btn btn-primary"
-                  >
-                    {importing ? 'Importing...' : 'Import Questions'}
-                  </button>
-                </div>
-              </div>
+              {/* Tab 2: Upload File */}
+              {importTab === 'upload' && (
+                <>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Upload a PDF, DOCX, TXT, or image file. The system will extract text and parse questions automatically.
+                  </p>
+                  <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
+                    {!uploadedFile ? (
+                      <>
+                        <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                        <p className="text-sm text-gray-500 mb-2">Drag and drop a file here, or click to browse</p>
+                        <p className="text-xs text-gray-400 mb-4">Supports PDF, DOCX, TXT, PNG, JPG, GIF, BMP, WebP</p>
+                        <label className="btn btn-outline cursor-pointer">
+                          Browse Files
+                          <input
+                            type="file"
+                            className="hidden"
+                            accept=".pdf,.docx,.txt,.png,.jpg,.jpeg,.gif,.bmp,.webp"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              if (file) setUploadedFile(file);
+                            }}
+                          />
+                        </label>
+                      </>
+                    ) : (
+                      <div>
+                        <div className="flex items-center justify-center gap-3 mb-4">
+                          <svg className="w-8 h-8 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                          </svg>
+                          <div className="text-left">
+                            <p className="text-sm font-medium text-gray-900">{uploadedFile.name}</p>
+                            <p className="text-xs text-gray-500">{(uploadedFile.size / 1024).toFixed(1)} KB</p>
+                          </div>
+                        </div>
+                        <div className="flex gap-3 justify-center">
+                          <button
+                            onClick={() => setUploadedFile(null)}
+                            className="btn btn-outline text-sm"
+                          >
+                            Remove
+                          </button>
+                          <button
+                            onClick={async () => {
+                              if (!uploadedFile || !exam) return;
+                              setUploading(true);
+                              try {
+                                const formData = new FormData();
+                                formData.append('file', uploadedFile);
+                                const res = await fetch(`/api/teacher/exams/${examId}/questions/upload`, {
+                                  method: 'POST',
+                                  body: formData,
+                                });
+                                const data = await res.json();
+                                if (!res.ok) {
+                                  toast.error(data.error || 'Failed to extract text');
+                                  return;
+                                }
+                                // Switch to paste tab with extracted text
+                                setBulkText(data.text);
+                                setImportTab('paste');
+                                setUploadedFile(null);
+                                toast.success(`Text extracted from ${data.fileName} (${data.charCount} chars)`);
+                              } catch (error) {
+                                toast.error('Failed to process file');
+                              } finally {
+                                setUploading(false);
+                              }
+                            }}
+                            disabled={uploading}
+                            className="btn btn-primary text-sm"
+                          >
+                            {uploading ? 'Extracting...' : 'Extract & Import'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </>
+              )}
+
+              {/* Tab 3: Generate Questions */}
+              {importTab === 'generate' && (
+                <>
+                  <p className="text-sm text-gray-500 mb-3">
+                    Describe the topic you want questions for, and the system will generate MCQ and/or essay questions with marking schemes.
+                  </p>
+                  <textarea
+                    rows={6}
+                    className="input w-full min-h-[120px]"
+                    placeholder={`Describe your topic in detail. For example:
+
+"Human reproductive system - male and female anatomy, gamete production, fertilization, pregnancy, and puberty. Include both multiple choice and essay questions."
+
+The more detail you provide, the better the generated questions will be.`}
+                    value={generatePrompt}
+                    onChange={(e) => setGeneratePrompt(e.target.value)}
+                  />
+                  <div className="mt-4 flex items-center justify-between">
+                    <p className="text-xs text-gray-500">
+                      {generatePrompt.length} characters
+                    </p>
+                    <div className="flex gap-3">
+                      <button
+                        onClick={() => { setShowBulkImport(false); setGeneratePrompt(''); }}
+                        className="btn btn-outline"
+                      >
+                        Cancel
+                      </button>
+                      <button
+                        onClick={async () => {
+                          if (!generatePrompt.trim() || !exam) {
+                            toast.error('Please enter a topic description');
+                            return;
+                          }
+                          setGenerating(true);
+                          try {
+                            const res = await fetch(`/api/teacher/exams/${examId}/questions/generate`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                prompt: generatePrompt,
+                                format: exam.format,
+                              }),
+                            });
+                            const data = await res.json();
+                            if (!res.ok) {
+                              toast.error(data.error || 'Failed to generate questions');
+                              return;
+                            }
+                            toast.success(data.message);
+                            setShowBulkImport(false);
+                            setGeneratePrompt('');
+                            fetchExamData();
+                          } catch (error) {
+                            toast.error('Failed to generate questions');
+                          } finally {
+                            setGenerating(false);
+                          }
+                        }}
+                        disabled={generating || !generatePrompt.trim()}
+                        className="btn btn-primary"
+                      >
+                        {generating ? (
+                          <span className="flex items-center gap-2">
+                            <div className="animate-spin w-4 h-4 border-2 border-white border-t-transparent rounded-full"></div>
+                            Generating...
+                          </span>
+                        ) : (
+                          'Generate Questions'
+                        )}
+                      </button>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         </div>
