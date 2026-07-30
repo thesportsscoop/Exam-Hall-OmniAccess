@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
+import Question from '@/models/Question';
 import { getAuthUser } from '@/lib/auth';
 import { parseQuestions } from '@/lib/question-parser/index.js';
 
@@ -11,7 +12,7 @@ import { parseQuestions } from '@/lib/question-parser/index.js';
  * 2. Detect sections
  * 3. Parse with dedicated parsers (MCQ, Essay)
  * 4. AI Validation
- * Returns preview WITHOUT saving to database.
+ * Supports preview mode or direct database saving when saveToDb is true.
  */
 export async function POST(request, { params }) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request, { params }) {
     }
 
     const body = await request.json();
-    const { text } = body;
+    const { text, saveToDb } = body;
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json(
@@ -37,19 +38,41 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Run the multi-stage parsing pipeline
+    // Run the multi-stage parsing pipeline[cite: 11]
     const parseResult = await parseQuestions(text);
 
-    // Return preview (does NOT save to database)
+    let savedCount = 0;
+    const createdQuestions = [];
+
+    // If persistence is requested, save parsed questions to MongoDB
+    if (saveToDb && parseResult.questions && parseResult.questions.length > 0) {
+      for (const q of parseResult.questions) {
+        const newQuestion = await Question.create({
+          examId: params.id,
+          type: q.type || 'mcq',
+          questionText: q.questionText || '',
+          options: q.options || [],
+          correctAnswer: q.correctAnswer || '',
+          markingScheme: q.markingScheme || '',
+          points: q.points || 1,
+        });
+        createdQuestions.push(newQuestion);
+      }
+      savedCount = createdQuestions.length;
+    }
+
+    // Return preview or confirmation response
     return NextResponse.json({
-      message: parseResult.summary || 'Parsing complete',
-      questions: parseResult.questions,
+      message: saveToDb
+        ? `Successfully parsed and saved ${savedCount} questions to database!`
+        : (parseResult.summary || 'Parsing complete'),
+      questions: saveToDb ? createdQuestions : parseResult.questions,
       warnings: parseResult.warnings,
       errors: parseResult.errors,
       sections: parseResult.sections,
       detectedFormat: parseResult.detectedFormat,
-      // Preview mode - no saving
-      preview: true,
+      preview: !saveToDb,
+      savedToDatabase: !!saveToDb,
       totalParsed: parseResult.questions.length,
       mcqCount: parseResult.questions.filter(q => q.type === 'mcq').length,
       essayCount: parseResult.questions.filter(q => q.type === 'essay').length,
