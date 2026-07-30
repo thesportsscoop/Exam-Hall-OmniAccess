@@ -5,6 +5,8 @@ import Question from '@/models/Question';
 import { getAuthUser } from '@/lib/auth';
 import { parseQuestions } from '@/lib/question-parser/index.js';
 
+export const dynamic = 'force-dynamic';
+
 /**
  * POST /api/teacher/exams/[id]/questions/parse
  * Multi-stage pipeline:
