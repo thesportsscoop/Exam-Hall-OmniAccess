@@ -524,7 +524,7 @@ export default function ExamManagePage() {
               <div>
                 <h3 className="text-lg font-semibold text-gray-900">Bulk Import Questions</h3>
                 <p className="text-sm text-gray-500 mt-1">
-                  Paste your questions in tabular format (CSV, TSV, or plain text). The AI will automatically parse and structure them.
+                  Paste your questions in any format. The AI will automatically detect and structure them — including natural language, tabular data (CSV/TSV), sections with marks, and answer keys.
                 </p>
               </div>
               <button
