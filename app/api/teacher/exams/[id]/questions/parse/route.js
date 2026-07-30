@@ -726,13 +726,46 @@ export async function POST(request, { params }) {
     const allQuestions = [...parsed.mcqQuestions, ...parsed.essayQuestions];
 
     if (allQuestions.length === 0) {
-      return NextResponse.json(
-        { 
-          error: 'Could not detect any valid questions in the provided text', 
-          details: 'Please ensure your questions follow a recognizable format. For MCQs, include question text followed by options (A) B) C) D)). For essay questions, include clear question text with sub-questions if applicable.' 
-        },
-        { status: 400 }
-      );
+      // Fallback: create a single essay question from the raw text
+      const fallbackQuestion = await Question.create({
+        examId: params.id,
+        type: 'essay',
+        questionText: text.trim().substring(0, 2000),
+        options: [],
+        correctAnswer: '',
+        markingScheme: `Marking Scheme (Total: 10 marks):\n\n` +
+          `Expected Key Points:\n` +
+          `- Award marks for each correct key point mentioned\n` +
+          `- Credit well-structured and clearly explained answers\n\n` +
+          `Marking Guidelines:\n` +
+          `- Full marks (10 pts): Complete, accurate, well-explained answer\n` +
+          `- 6-9 pts: Good answer with minor omissions\n` +
+          `- 3-5 pts: Partial answer, some key points missing\n` +
+          `- 1-2 pts: Attempt made but largely incorrect\n` +
+          `- 0 pts: No attempt or completely off-topic\n`,
+        points: 10,
+      });
+
+      return NextResponse.json({
+        message: 'Created essay question from text (no structured questions detected)',
+        questions: [{
+          _id: fallbackQuestion._id.toString(),
+          type: fallbackQuestion.type,
+          questionText: fallbackQuestion.questionText,
+          options: fallbackQuestion.options,
+          correctAnswer: fallbackQuestion.correctAnswer,
+          markingScheme: fallbackQuestion.markingScheme,
+          points: fallbackQuestion.points,
+        }],
+        parseInfo: {
+          detectedFormat: 'fallback',
+          totalParsed: 1,
+          mcqCount: 0,
+          essayCount: 1,
+          totalMcqMarks: 0,
+          totalEssayMarks: 10,
+        }
+      }, { status: 201 });
     }
 
     // Save questions to database
