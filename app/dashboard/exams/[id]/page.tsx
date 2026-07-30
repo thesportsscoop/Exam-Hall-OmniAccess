@@ -62,6 +62,22 @@ export default function ExamManagePage() {
   const [generatePrompt, setGeneratePrompt] = useState('');
   const [generating, setGenerating] = useState(false);
 
+  // Preview state
+  const [showPreview, setShowPreview] = useState(false);
+  const [previewQuestions, setPreviewQuestions] = useState<any[]>([]);
+  const [previewWarnings, setPreviewWarnings] = useState<string[]>([]);
+  const [previewErrors, setPreviewErrors] = useState<string[]>([]);
+  const [savingQuestions, setSavingQuestions] = useState(false);
+  const [previewMode, setPreviewMode] = useState<'parse' | 'generate'>('parse');
+
+  // Editing state within preview
+  const [editingPreviewIndex, setEditingPreviewIndex] = useState<number | null>(null);
+  const [editQuestionText, setEditQuestionText] = useState('');
+  const [editOptions, setEditOptions] = useState<{ label: string; text: string }[]>([]);
+  const [editCorrectAnswer, setEditCorrectAnswer] = useState('');
+  const [editMarkingScheme, setEditMarkingScheme] = useState('');
+  const [editPoints, setEditPoints] = useState(1);
+
   useEffect(() => {
     fetchExamData();
   }, [examId]);
@@ -239,19 +255,93 @@ export default function ExamManagePage() {
       const data = await res.json();
 
       if (!res.ok) {
-        toast.error(data.error || 'Failed to import questions');
+        toast.error(data.error || 'Failed to parse questions');
+        return;
+      }
+
+      // Show preview with parsed questions
+      setPreviewQuestions(data.questions || []);
+      setPreviewWarnings(data.warnings || []);
+      setPreviewErrors(data.errors || []);
+      setPreviewMode('parse');
+      setShowPreview(true);
+      setShowBulkImport(false);
+    } catch (error) {
+      toast.error('Failed to parse questions');
+    } finally {
+      setImporting(false);
+    }
+  };
+
+  const handleSaveQuestions = async () => {
+    if (previewQuestions.length === 0) {
+      toast.error('No questions to save');
+      return;
+    }
+
+    setSavingQuestions(true);
+
+    try {
+      const res = await fetch(`/api/teacher/exams/${examId}/questions/save`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ questions: previewQuestions }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to save questions');
         return;
       }
 
       toast.success(data.message);
-      setShowBulkImport(false);
+      setShowPreview(false);
+      setPreviewQuestions([]);
+      setPreviewWarnings([]);
+      setPreviewErrors([]);
       setBulkText('');
       fetchExamData();
     } catch (error) {
-      toast.error('Failed to import questions');
+      toast.error('Failed to save questions');
     } finally {
-      setImporting(false);
+      setSavingQuestions(false);
     }
+  };
+
+  const handleDeletePreviewQuestion = (index: number) => {
+    setPreviewQuestions(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const handleEditPreviewQuestion = (index: number) => {
+    const q = previewQuestions[index];
+    setEditingPreviewIndex(index);
+    setEditQuestionText(q.questionText);
+    setEditPoints(q.points);
+    if (q.type === 'mcq') {
+      setEditOptions([...q.options]);
+      setEditCorrectAnswer(q.correctAnswer);
+    } else {
+      setEditMarkingScheme(q.markingScheme || '');
+    }
+  };
+
+  const handleSaveEditPreview = () => {
+    if (editingPreviewIndex === null) return;
+    const updated = [...previewQuestions];
+    const q = updated[editingPreviewIndex];
+    q.questionText = editQuestionText;
+    q.points = editPoints;
+    if (q.type === 'mcq') {
+      q.options = [...editOptions];
+      q.correctAnswer = editCorrectAnswer;
+    } else {
+      q.markingScheme = editMarkingScheme;
+    }
+    updated[editingPreviewIndex] = q;
+    setPreviewQuestions(updated);
+    setEditingPreviewIndex(null);
+    toast.success('Question updated in preview');
   };
 
   const toggleExamActive = async () => {
@@ -811,6 +901,219 @@ The more detail you provide, the better the generated questions will be.`}
                   </div>
                 </>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Preview Modal */}
+      {showPreview && (
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center overflow-y-auto z-50 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-4xl w-full mt-12 mb-12">
+            <div className="flex items-center justify-between p-6 border-b border-gray-200">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Preview Questions ({previewQuestions.length})
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">
+                  {previewMode === 'parse' ? 'Parsed from your text' : 'Generated from AI'} — Review and edit before saving.
+                </p>
+              </div>
+              <button
+                onClick={() => { setShowPreview(false); setPreviewQuestions([]); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Warnings & Errors */}
+            {(previewWarnings.length > 0 || previewErrors.length > 0) && (
+              <div className="px-6 py-3 border-b border-gray-200">
+                {previewWarnings.map((w, i) => (
+                  <p key={`w-${i}`} className="text-sm text-yellow-700 flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    {w}
+                  </p>
+                ))}
+                {previewErrors.map((e, i) => (
+                  <p key={`e-${i}`} className="text-sm text-red-600 flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                    {e}
+                  </p>
+                ))}
+              </div>
+            )}
+
+            {/* Preview Questions List */}
+            <div className="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto">
+              {previewQuestions.length === 0 ? (
+                <div className="p-6 text-center text-gray-500">
+                  <p>No questions were parsed. Try different formatting or use the Generate tab.</p>
+                </div>
+              ) : (
+                previewQuestions.map((q, index) => (
+                  <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
+                    {editingPreviewIndex === index ? (
+                      /* Inline Edit Mode */
+                      <div className="space-y-3">
+                        <div className="flex items-center gap-2 mb-2">
+                          <span className="text-sm font-medium text-gray-700">Editing Q{index + 1}</span>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            q.type === 'mcq' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
+                          }`}>
+                            {q.type === 'mcq' ? 'MCQ' : 'Essay'}
+                          </span>
+                        </div>
+                        <textarea
+                          className="input w-full text-sm"
+                          rows={2}
+                          value={editQuestionText}
+                          onChange={(e) => setEditQuestionText(e.target.value)}
+                        />
+                        <div className="flex items-center gap-2">
+                          <label className="text-xs text-gray-500">Points:</label>
+                          <input
+                            type="number"
+                            min={1}
+                            className="input w-20 text-sm"
+                            value={editPoints}
+                            onChange={(e) => setEditPoints(parseInt(e.target.value) || 1)}
+                          />
+                        </div>
+                        {q.type === 'mcq' && (
+                          <div className="space-y-1">
+                            {editOptions.map((opt: { label: string; text: string }, oi) => (
+                              <div key={oi} className="flex items-center gap-2">
+                                <span className="text-xs font-medium text-gray-600 w-5">{opt.label}.</span>
+                                <input
+                                  type="text"
+                                  className="input flex-1 text-sm"
+                                  value={opt.text}
+                                  onChange={(e) => {
+                                    const newOpts = [...editOptions];
+                                    newOpts[oi] = { ...opt, text: e.target.value };
+                                    setEditOptions(newOpts);
+                                  }}
+                                />
+                                <button
+                                  onClick={() => setEditCorrectAnswer(opt.label)}
+                                  className={`px-2 py-1 rounded text-xs font-medium border ${
+                                    editCorrectAnswer === opt.label
+                                      ? 'bg-green-50 border-green-300 text-green-700'
+                                      : 'bg-white border-gray-200 text-gray-500'
+                                  }`}
+                                >
+                                  {editCorrectAnswer === opt.label ? '✓ Correct' : 'Correct'}
+                                </button>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                        {q.type === 'essay' && (
+                          <textarea
+                            className="input w-full text-sm"
+                            rows={3}
+                            placeholder="Marking scheme..."
+                            value={editMarkingScheme}
+                            onChange={(e) => setEditMarkingScheme(e.target.value)}
+                          />
+                        )}
+                        <div className="flex gap-2 justify-end">
+                          <button onClick={() => setEditingPreviewIndex(null)} className="btn btn-outline text-sm">Cancel</button>
+                          <button onClick={handleSaveEditPreview} className="btn btn-primary text-sm">Save</button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* View Mode */
+                      <div className="flex items-start gap-4">
+                        <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                          <span className="text-sm font-medium text-blue-700">{index + 1}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                              q.type === 'mcq' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
+                            }`}>
+                              {q.type === 'mcq' ? 'MCQ' : 'Essay'}
+                            </span>
+                            <span className="text-xs text-gray-500">{q.points || 1} pt{(q.points || 1) !== 1 ? 's' : ''}</span>
+                          </div>
+                          <p className="text-sm text-gray-900 mb-2">{q.questionText}</p>
+                          {q.type === 'mcq' && q.options && q.options.length > 0 && (
+                            <div className="grid grid-cols-2 gap-2 mb-2">
+                              {q.options.map((opt: { label: string; text: string }) => (
+                                <div key={opt.label} className={`text-xs px-2 py-1 rounded ${
+                                  opt.label === q.correctAnswer
+                                    ? 'bg-green-50 text-green-700 border border-green-200'
+                                    : 'bg-gray-50 text-gray-600 border border-gray-200'
+                                }`}>
+                                  <span className="font-medium">{opt.label}.</span> {opt.text}
+                                  {opt.label === q.correctAnswer && <span className="ml-1">✓</span>}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                          {q.type === 'essay' && q.markingScheme && (
+                            <div className="bg-blue-50 border border-blue-100 rounded p-2 mb-2">
+                              <p className="text-xs font-medium text-blue-700 mb-1">Marking Rubric:</p>
+                              <p className="text-xs text-blue-600 whitespace-pre-wrap">{q.markingScheme}</p>
+                            </div>
+                          )}
+                        </div>
+                        <div className="flex-shrink-0 flex gap-2">
+                          <button
+                            onClick={() => handleEditPreviewQuestion(index)}
+                            className="text-gray-400 hover:text-blue-600 transition-colors"
+                            title="Edit"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={() => handleDeletePreviewQuestion(index)}
+                            className="text-gray-400 hover:text-red-600 transition-colors"
+                            title="Remove"
+                          >
+                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ))
+              )}
+            </div>
+
+            {/* Footer Actions */}
+            <div className="flex items-center justify-between p-6 border-t border-gray-200">
+              <p className="text-sm text-gray-500">
+                {previewQuestions.length} question(s) ready to save
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => { setShowPreview(false); setPreviewQuestions([]); }}
+                  className="btn btn-outline"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveQuestions}
+                  disabled={savingQuestions || previewQuestions.length === 0}
+                  className="btn btn-primary"
+                >
+                  {savingQuestions ? 'Saving...' : `Save ${previewQuestions.length} Question(s)`}
+                </button>
+              </div>
             </div>
           </div>
         </div>
