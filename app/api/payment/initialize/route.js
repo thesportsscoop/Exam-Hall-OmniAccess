@@ -28,6 +28,12 @@ export async function POST(request) {
       );
     }
 
+    // Use the host from the request to build the callback URL dynamically
+    // This ensures it works in both local development and production
+    const host = request.headers.get('host') || 'localhost:3000';
+    const protocol = process.env.NODE_ENV === 'production' ? 'https' : 'http';
+    const baseUrl = `${protocol}://${host}`;
+
     const response = await fetch(`${PAYSTACK_API}/transaction/initialize`, {
       method: 'POST',
       headers: {
@@ -43,7 +49,7 @@ export async function POST(request) {
           teacherId: decoded.id,
           purpose: 'exam_creation',
         },
-        callback_url: `${process.env.NEXT_PUBLIC_APP_URL}/dashboard/exams/create?payment_status=completed`,
+        callback_url: `${baseUrl}/dashboard/exams/create?payment_status=completed`,
       }),
     });
 
