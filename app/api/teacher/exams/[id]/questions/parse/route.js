@@ -356,9 +356,10 @@ function tryParseMCQ(lines, startIndex) {
   
   // A line is a candidate MCQ question if it:
   // 1. Starts with a number (e.g., "1. What is...")
-  // 2. Is a long sentence (>= 15 chars) with a question mark or is long enough (>= 20 chars)
+  // 2. Has a question mark
+  // 3. Is at least 10 chars long
   const hasQuestionNumber = /^\d+[.)\s]/.test(firstLine);
-  const isQuestionText = firstLine.length >= 15 && (firstLine.includes('?') || firstLine.length >= 20);
+  const isQuestionText = firstLine.length >= 10;
   
   if (!hasQuestionNumber && !isQuestionText) return null;
   
@@ -375,15 +376,15 @@ function tryParseMCQ(lines, startIndex) {
   }
   
   // Look for options in the next lines
-  // MCQ options MUST be UPPERCASE A-D (not lowercase a-e which are essay sub-questions)
   const options = [];
   let nextIndex = startIndex + 1;
   
   while (nextIndex < lines.length) {
     const line = lines[nextIndex].trim();
     
-    // Match UPPERCASE options: A) text, B. text, C - text, D: text
-    const optionMatch = line.match(/^([A-D])\s*[)\].\s\-:]\s*(.+)/);
+    // Match options: A) text, B. text, C - text, D: text, (A) text, etc.
+    // Accept both uppercase A-D and lowercase a-d
+    const optionMatch = line.match(/^\(?([A-Da-d])\s*[)\].\s\-:]\s*(.+)/);
     
     if (optionMatch) {
       options.push({
@@ -398,14 +399,6 @@ function tryParseMCQ(lines, startIndex) {
   
   // Must have at least 2 options to be a valid MCQ
   if (options.length < 2) return null;
-  
-  // Check that options are properly labeled (A, B, C, D in sequence)
-  const expectedLabels = ['A', 'B', 'C', 'D', 'E'];
-  for (let j = 0; j < options.length; j++) {
-    if (options[j].label !== expectedLabels[j]) {
-      return null; // Not sequential labels, likely not an MCQ
-    }
-  }
   
   return {
     number: questionNumber,
