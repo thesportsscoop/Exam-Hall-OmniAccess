@@ -17,15 +17,44 @@ export async function POST(request, { params }) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
     }
 
-    const formData = await request.formData();
+    let formData;
+    try {
+      formData = await request.formData();
+    } catch (e) {
+      return NextResponse.json(
+        { error: 'Invalid form data. Make sure you are sending a multipart/form-data request with a "file" field.' },
+        { status: 400 }
+      );
+    }
+
     const file = formData.get('file');
     
     if (!file) {
-      return NextResponse.json({ error: 'No file provided' }, { status: 400 });
+      return NextResponse.json(
+        { error: 'No file provided. Please select a file to upload.' },
+        { status: 400 }
+      );
     }
 
-    const buffer = Buffer.from(await file.arrayBuffer());
-    const fileName = file.name.toLowerCase();
+    // Validate file size (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      return NextResponse.json(
+        { error: 'File too large. Maximum size is 10MB.' },
+        { status: 400 }
+      );
+    }
+
+    let buffer;
+    try {
+      buffer = Buffer.from(await file.arrayBuffer());
+    } catch (e) {
+      return NextResponse.json(
+        { error: 'Failed to read file. Please try again.' },
+        { status: 400 }
+      );
+    }
+
+    const fileName = file.name ? file.name.toLowerCase() : 'unknown';
     let extractedText = '';
 
     // Extract text based on file type
@@ -39,14 +68,14 @@ export async function POST(request, { params }) {
       extractedText = await extractImageText(buffer);
     } else {
       return NextResponse.json(
-        { error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or image files.' },
+        { error: 'Unsupported file type. Please upload PDF, DOCX, TXT, or image files (PNG, JPG, GIF, BMP, WebP).' },
         { status: 400 }
       );
     }
 
-    if (!extractedText.trim()) {
+    if (!extractedText || !extractedText.trim()) {
       return NextResponse.json(
-        { error: 'Could not extract any text from the file' },
+        { error: 'Could not extract any text from the file. The file may be empty, scanned (image-only PDF), or corrupted.' },
         { status: 400 }
       );
     }
@@ -54,7 +83,7 @@ export async function POST(request, { params }) {
     return NextResponse.json({
       message: 'Text extracted successfully',
       text: extractedText,
-      fileName: file.name,
+      fileName: file.name || 'unknown',
       fileType: fileName.split('.').pop(),
       charCount: extractedText.length,
     });
@@ -62,7 +91,7 @@ export async function POST(request, { params }) {
   } catch (error) {
     console.error('File upload error:', error);
     return NextResponse.json(
-      { error: 'Failed to process file', details: error.message },
+      { error: 'Failed to process file: ' + (error.message || 'Unknown error') },
       { status: 500 }
     );
   }
@@ -70,35 +99,38 @@ export async function POST(request, { params }) {
 
 async function extractPDFText(buffer) {
   try {
-    const pdfParse = require('pdf-parse');
+    // Dynamic import for serverless compatibility
+    const pdfParse = (await import('pdf-parse')).default;
     const data = await pdfParse(buffer);
     return data.text;
   } catch (error) {
     console.error('PDF extraction error:', error);
-    throw new Error('Failed to extract text from PDF: ' + error.message);
+    throw new Error('Failed to extract text from PDF. Ensure the PDF contains selectable text (not scanned).');
   }
 }
 
 async function extractDOCXText(buffer) {
   try {
-    const mammoth = require('mammoth');
+    // Dynamic import for serverless compatibility
+    const mammoth = await import('mammoth');
     const result = await mammoth.extractRawText({ buffer });
     return result.value;
   } catch (error) {
     console.error('DOCX extraction error:', error);
-    throw new Error('Failed to extract text from DOCX: ' + error.message);
+    throw new Error('Failed to extract text from DOCX. The file may be corrupted or password-protected.');
   }
 }
 
 async function extractImageText(buffer) {
   try {
-    const Tesseract = require('tesseract.js');
+    // Dynamic import for serverless compatibility
+    const Tesseract = await import('tesseract.js');
     const { data } = await Tesseract.recognize(buffer, 'eng', {
       logger: () => {}, // Suppress progress logs
     });
     return data.text;
   } catch (error) {
     console.error('OCR extraction error:', error);
-    throw new Error('Failed to extract text from image: ' + error.message);
+    throw new Error('Failed to extract text from image. The image may be too blurry or low-resolution.');
   }
 }
