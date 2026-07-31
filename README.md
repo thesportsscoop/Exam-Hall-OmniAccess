@@ -10,7 +10,8 @@ A secure, zero-cost online assessment platform for educators featuring automated
 - **Paystack Integration**: GHS 100 exam creation fee
 - **Exam Management**: MCQ, Essay, and Hybrid formats with passkey access
 - **AI Proctoring**: Identity verification, environment scan, continuous monitoring
-- **Question Bank**: Add/upload questions with marking rubrics
+   - **AI-Powered Question Parsing**: Paste text, upload PDF/images, or generate questions via Gemini AI
+   - **Question Bank**: Add/upload questions with marking rubrics
 
 ## Prerequisites
 
@@ -53,6 +54,8 @@ JWT_SECRET=your-super-secret-jwt-key-change-this-in-production
 NEXT_PUBLIC_APP_URL=http://localhost:3000
 NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=pk_test_c16d98a0ce1eb7f55f8cd703949c881301556882
 PAYSTACK_SECRET_KEY=sk_test_0b4e504e7602078a2e0cce0a2bb6b02a14a4bca1
+GEMINI_API_KEY=AIzaSyA00QoG1hY8uweGRGKDJ-NSH9tk20R3GUc
+GEMINI_API_KEY_BACKUP=Q.Ab8RN6J1ClIPWs6UAlYF3SEEwF1hEzgsdwGD634TrlmvO1ppdA
 ```
 
 ### 4. Run the Application
@@ -109,7 +112,16 @@ components/
 
 lib/
 ├── auth.js                  # JWT & cookie utilities
-└── mongodb.js               # MongoDB connection
+├── mongodb.js               # MongoDB connection
+├── seed.js                  # Super admin seeding
+├── ai-parser.js             # AI-powered text-to-question parser (Gemini)
+├── question-parser/         # Rule-based question parsing pipeline (fallback)
+│   ├── index.js             # Pipeline orchestrator
+│   ├── normalizer.js        # Text normalization
+│   ├── section-detector.js  # Section detection
+│   ├── mcq-parser.js        # MCQ parsing
+│   ├── essay-parser.js      # Essay parsing
+│   └── ai-validator.js      # AI validation of parsed questions
 
 models/
 ├── User.js                  # User schema (teacher/admin)
@@ -142,6 +154,9 @@ models/
 - `POST /api/teacher/exams/[id]/questions` - Add question
 - `PUT /api/teacher/exams/[id]/questions` - Update question
 - `DELETE /api/teacher/exams/[id]/questions` - Delete question
+- `POST /api/teacher/exams/[id]/questions/parse` - Parse text into questions (AI-powered via Gemini)
+- `POST /api/teacher/exams/[id]/questions/upload` - Upload file, extract text, and optionally parse with AI
+- `POST /api/teacher/exams/[id]/questions/save` - Save previewed questions to database
 - `GET /api/teacher/exams/[id]/proctoring` - Get proctoring reports
 
 ### Payment

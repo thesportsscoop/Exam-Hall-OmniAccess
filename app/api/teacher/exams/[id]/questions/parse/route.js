@@ -3,18 +3,22 @@ import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
 import Question from '@/models/Question';
 import { getAuthUser } from '@/lib/auth';
-import { parseQuestions } from '@/lib/question-parser/index.js';
+import { parseQuestions } from '@/lib/ai-parser.js';
 
 export const dynamic = 'force-dynamic';
 
 /**
  * POST /api/teacher/exams/[id]/questions/parse
- * Multi-stage pipeline:
- * 1. Normalize text
- * 2. Detect sections
- * 3. Parse with dedicated parsers (MCQ, Essay)
- * 4. AI Validation
- * Supports preview mode or direct database saving when saveToDb is true.
+ * AI-Powered Question Parser:
+ * 1. Sends text to Gemini AI for structured parsing
+ * 2. Returns parsed questions (MCQ and/or Essay) with marking schemes
+ * 3. Supports preview mode or direct database saving when saveToDb is true.
+ *
+ * The AI parser:
+ * - Parses pasted text into MCQ and Essay questions
+ * - Extracts marking schemes if provided in the text
+ * - Auto-generates marking schemes for essay questions when not provided
+ * - Accepts text extracted from PDF, DOCX, TXT, and image files (OCR)
  */
 export async function POST(request, { params }) {
   try {
@@ -31,7 +35,7 @@ export async function POST(request, { params }) {
     }
 
     const body = await request.json();
-    const { text, saveToDb } = body;
+    const { text, saveToDb, examFormat } = body;
 
     if (!text || text.trim().length === 0) {
       return NextResponse.json(
@@ -40,8 +44,8 @@ export async function POST(request, { params }) {
       );
     }
 
-    // Run the multi-stage parsing pipeline[cite: 11]
-    const parseResult = await parseQuestions(text);
+    // Run the AI-powered parsing pipeline
+    const parseResult = await parseQuestions(text, examFormat || exam.format || 'hybrid');
 
     let savedCount = 0;
     const createdQuestions = [];

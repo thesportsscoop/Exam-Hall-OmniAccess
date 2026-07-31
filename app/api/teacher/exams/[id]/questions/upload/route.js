@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
 import { getAuthUser } from '@/lib/auth';
+import { parseQuestions } from '@/lib/ai-parser.js';
 
 export async function POST(request, { params }) {
   try {
@@ -28,7 +29,7 @@ export async function POST(request, { params }) {
     }
 
     const file = formData.get('file');
-    
+
     if (!file) {
       return NextResponse.json(
         { error: 'No file provided. Please select a file to upload.' },
@@ -43,6 +44,10 @@ export async function POST(request, { params }) {
         { status: 400 }
       );
     }
+
+    // Check if AI parsing is requested
+    const parseAfterExtract = formData.get('parseAfterExtract') === 'true';
+    const examFormat = formData.get('examFormat') || exam.format || 'hybrid';
 
     let buffer;
     try {
@@ -80,13 +85,44 @@ export async function POST(request, { params }) {
       );
     }
 
-    return NextResponse.json({
+    const response = {
       message: 'Text extracted successfully',
       text: extractedText,
       fileName: file.name || 'unknown',
       fileType: fileName.split('.').pop(),
       charCount: extractedText.length,
-    });
+    };
+
+    // If AI parsing is requested, parse the extracted text through the AI parser
+    if (parseAfterExtract) {
+      try {
+        const parseResult = await parseQuestions(extractedText, examFormat);
+
+        response.parsed = true;
+        response.questions = parseResult.questions || [];
+        response.warnings = parseResult.warnings || [];
+        response.errors = parseResult.errors || [];
+        response.sections = parseResult.sections || [];
+        response.detectedFormat = parseResult.detectedFormat || 'natural';
+        response.totalParsed = parseResult.questions?.length || 0;
+        response.mcqCount = parseResult.questions?.filter(q => q.type === 'mcq').length || 0;
+        response.essayCount = parseResult.questions?.filter(q => q.type === 'essay').length || 0;
+        response.parseSummary = parseResult.summary || '';
+
+        if (parseResult.questions?.length === 0) {
+          response.message = 'Text extracted but no questions were parsed. Review the text manually.';
+        } else {
+          response.message = `Text extracted and ${parseResult.questions.length} question(s) parsed using AI.`;
+        }
+      } catch (parseError) {
+        console.error('AI parsing after upload failed:', parseError.message);
+        response.parsed = false;
+        response.parseError = parseError.message;
+        // Still return the extracted text so teacher can use paste tab
+      }
+    }
+
+    return NextResponse.json(response);
 
   } catch (error) {
     console.error('File upload error:', error);

@@ -794,6 +794,8 @@ c) State two characteristics`}
                               try {
                                 const formData = new FormData();
                                 formData.append('file', uploadedFile);
+                                formData.append('parseAfterExtract', 'true');
+                                formData.append('examFormat', exam.format);
                                 const res = await fetch(`/api/teacher/exams/${examId}/questions/upload`, {
                                   method: 'POST',
                                   body: formData,
@@ -803,11 +805,26 @@ c) State two characteristics`}
                                   toast.error(data.error || 'Failed to extract text');
                                   return;
                                 }
-                                // Switch to paste tab with extracted text
-                                setBulkText(data.text);
-                                setImportTab('paste');
-                                setUploadedFile(null);
-                                toast.success(`Text extracted from ${data.fileName} (${data.charCount} chars)`);
+                                if (data.parsed && data.questions && data.questions.length > 0) {
+                                  // AI parsed questions - show in preview
+                                  setPreviewQuestions(data.questions);
+                                  setPreviewWarnings(data.warnings || []);
+                                  setPreviewErrors(data.errors || []);
+                                  setPreviewMode('parse');
+                                  setShowPreview(true);
+                                  setShowBulkImport(false);
+                                  setUploadedFile(null);
+                                  toast.success(`Extracted and parsed ${data.totalParsed} question(s) from ${data.fileName} using AI`);
+                                } else {
+                                  // No questions parsed, show extracted text in paste tab
+                                  setBulkText(data.text);
+                                  setImportTab('paste');
+                                  setUploadedFile(null);
+                                  if (data.parseError) {
+                                    toast(data.parseError, { duration: 5000 });
+                                  }
+                                  toast.success(`Text extracted from ${data.fileName} (${data.charCount} chars). Review and click Import Questions.`);
+                                }
                               } catch (error) {
                                 toast.error('Failed to process file');
                               } finally {
@@ -817,7 +834,7 @@ c) State two characteristics`}
                             disabled={uploading}
                             className="btn btn-primary text-sm"
                           >
-                            {uploading ? 'Extracting...' : 'Extract & Import'}
+                            {uploading ? 'Extracting & Parsing...' : 'Extract & Parse with AI'}
                           </button>
                         </div>
                       </div>
