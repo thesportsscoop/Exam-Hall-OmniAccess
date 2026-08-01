@@ -208,6 +208,8 @@ export default function QuestionCreationHub() {
         errors: [],
       }));
 
+      console.log('Setting questions:', parsedQuestions.length, parsedQuestions);
+      
       setQuestions(parsedQuestions);
       const validationMap = validateQuestions(parsedQuestions);
       setValidations(validationMap);
@@ -220,11 +222,15 @@ export default function QuestionCreationHub() {
       
       toast.success(`Parsed ${parsedQuestions.length} questions successfully!`);
       
+      // Immediately show questions list
+      setParsingStage('idle');
+      setParsingProgress([]);
+      setSelectedMethod(null);
+      
+      // Scroll to questions list after a short delay
       setTimeout(() => {
-        setSelectedMethod(null);
-        setParsingStage('idle');
-        setParsingProgress([]);
-      }, 1500);
+        window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+      }, 200);
     } catch (error) {
       toast.error('Failed to parse questions');
       setParsingStage('idle');
@@ -407,6 +413,8 @@ export default function QuestionCreationHub() {
   };
 
   const handleSaveAll = async () => {
+    console.log('Save button clicked, questions count:', questions.length);
+    
     if (questions.length === 0) {
       toast.error('No questions to save');
       return;
@@ -414,6 +422,8 @@ export default function QuestionCreationHub() {
 
     const validationMap = validateQuestions(questions);
     const errors = Array.from(validationMap.values()).flat().filter(v => v.severity === 'error');
+    
+    console.log('Validation errors:', errors);
     
     if (errors.length > 0) {
       toast.error(`Please fix ${errors.length} error(s) before saving`);
@@ -423,6 +433,8 @@ export default function QuestionCreationHub() {
 
     setSaving(true);
     try {
+      console.log('Saving questions:', questions);
+      
       const res = await fetch(`/api/teacher/exams/${examId}/questions/save`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -430,14 +442,18 @@ export default function QuestionCreationHub() {
       });
 
       const data = await res.json();
+      console.log('Save response:', { status: res.status, data });
+      
       if (!res.ok) {
         toast.error(data.error || 'Failed to save questions');
+        console.error('Save failed:', data);
         return;
       }
 
       toast.success(`Saved ${questions.length} questions successfully!`);
       router.push(`/dashboard/exams/${examId}`);
     } catch (error) {
+      console.error('Save error:', error);
       toast.error('Failed to save questions');
     } finally {
       setSaving(false);
