@@ -212,6 +212,12 @@ export default function QuestionCreationHub() {
       const validationMap = validateQuestions(parsedQuestions);
       setValidations(validationMap);
       
+      // Show debug info if available
+      if (data.debug) {
+        console.log('Parse debug info:', data.debug);
+        alert(`Debug Info:\nSections detected: ${data.debug.sectionsDetected}\nSection types: ${JSON.stringify(data.debug.sectionTypes)}\nQuality score: ${data.debug.qualityScore}\nTotal parsed: ${data.totalParsed}\nMCQs: ${data.mcqCount}\nEssays: ${data.essayCount}`);
+      }
+      
       toast.success(`Parsed ${parsedQuestions.length} questions successfully!`);
       
       setTimeout(() => {

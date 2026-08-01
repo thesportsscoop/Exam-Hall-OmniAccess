@@ -68,7 +68,7 @@ export async function POST(request, { params }) {
     }
 
     // Return preview or confirmation response
-    return NextResponse.json({
+    const responseData = {
       message: saveToDb
         ? `Successfully parsed and saved ${savedCount} questions to database!`
         : (parseResult.summary || 'Parsing complete'),
@@ -82,7 +82,16 @@ export async function POST(request, { params }) {
       totalParsed: parseResult.questions.length,
       mcqCount: parseResult.questions.filter(q => q.type === 'mcq').length,
       essayCount: parseResult.questions.filter(q => q.type === 'essay').length,
-    });
+      debug: {
+        sectionsDetected: parseResult.sections?.length || 0,
+        sectionTypes: parseResult.sections?.map(s => ({ type: s.type, lines: s.endLine - s.startLine + 1 })) || [],
+        qualityScore: quality.score,
+      }
+    };
+    
+    console.log('Parse response:', JSON.stringify(responseData, null, 2));
+    
+    return NextResponse.json(responseData);
 
   } catch (error) {
     console.error('Parse questions error:', error);
