@@ -31,6 +31,7 @@ export default function TeacherNav({ user }: TeacherNavProps) {
   const navLinks = [
     { href: '/dashboard', label: 'Dashboard' },
     { href: '/dashboard/exams', label: 'My Exams' },
+    { href: '/dashboard/exams/create-ai', label: 'Create Exam (AI)' },
   ];
 
   return (
