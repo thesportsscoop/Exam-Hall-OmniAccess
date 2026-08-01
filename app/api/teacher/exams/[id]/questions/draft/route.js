@@ -1,28 +1,23 @@
 import { NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import { connectToDatabase } from '@/lib/mongodb';
+import { getAuthUser } from '@/lib/auth';
+import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
 
 export async function POST(request, { params }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'teacher') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const decoded = await getAuthUser();
+    if (!decoded || decoded.role !== 'teacher') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     const { id } = params;
     const { questions } = await request.json();
 
-    await connectToDatabase();
+    await dbConnect();
 
-    const exam = await Exam.findById(id);
+    const exam = await Exam.findOne({ _id: id, teacherId: decoded.id });
     if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
-    }
-
-    if (exam.teacher.toString() !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
     // Store draft in exam document
@@ -39,22 +34,18 @@ export async function POST(request, { params }) {
 
 export async function GET(request, { params }) {
   try {
-    const session = await getServerSession(authOptions);
-    if (!session || session.user.role !== 'teacher') {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    const decoded = await getAuthUser();
+    if (!decoded || decoded.role !== 'teacher') {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
     const { id } = params;
 
-    await connectToDatabase();
+    await dbConnect();
 
-    const exam = await Exam.findById(id);
+    const exam = await Exam.findOne({ _id: id, teacherId: decoded.id });
     if (!exam) {
       return NextResponse.json({ error: 'Exam not found' }, { status: 404 });
-    }
-
-    if (exam.teacher.toString() !== session.user.id) {
-      return NextResponse.json({ error: 'Not authorized' }, { status: 403 });
     }
 
     // Return draft if it exists and is less than 24 hours old
