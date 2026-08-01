@@ -418,23 +418,34 @@ export default function ExamManagePage() {
             {exam.isActive ? 'Deactivate' : 'Activate'}
           </button>
           <button
-            onClick={() => router.push(`/dashboard/exams/${examId}/submissions`)}
-            className="btn btn-outline text-sm"
+            onClick={() => router.push(`/dashboard/exams/${examId}/questions`)}
+            className="btn btn-primary text-sm"
+            disabled={!exam.isPaid}
           >
-            Submissions
+            Manage Questions
           </button>
-          <button
-            onClick={() => router.push(`/dashboard/exams/${examId}/results`)}
-            className="btn btn-outline text-sm"
-          >
-            Results & Analytics
-          </button>
-          <button
-            onClick={() => router.push(`/dashboard/exams/${examId}/proctoring`)}
-            className="btn btn-outline text-sm"
-          >
-            Proctoring Reports
-          </button>
+          {exam.isPaid && (
+            <>
+              <button
+                onClick={() => router.push(`/dashboard/exams/${examId}/submissions`)}
+                className="btn btn-outline text-sm"
+              >
+                Submissions
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/exams/${examId}/results`)}
+                className="btn btn-outline text-sm"
+              >
+                Results & Analytics
+              </button>
+              <button
+                onClick={() => router.push(`/dashboard/exams/${examId}/proctoring`)}
+                className="btn btn-outline text-sm"
+              >
+                Proctoring Reports
+              </button>
+            </>
+          )}
           <button
             onClick={() => router.push('/dashboard/exams')}
             className="btn btn-outline text-sm"
@@ -486,132 +497,45 @@ export default function ExamManagePage() {
         </div>
       </div>
 
-      {/* Questions Section */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-8">
-        <div className="flex items-center justify-between p-6 border-b border-gray-200">
-          <h2 className="text-lg font-semibold text-gray-900">Questions</h2>
-          <div className="flex gap-2">
-            <button
-              onClick={() => setShowBulkImport(true)}
-              className="btn btn-outline text-sm"
-              disabled={!exam.isPaid}
-            >
-              Bulk Import
-            </button>
-            <button
-              onClick={() => setShowQuestionForm(true)}
-              className="btn btn-primary text-sm"
-              disabled={!exam.isPaid}
-            >
-              Add Question
-            </button>
+      {/* Questions Redirect Card */}
+      {exam.isPaid && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-12 text-center mb-8">
+          <div className="w-20 h-20 bg-blue-100 rounded-full flex items-center justify-center mx-auto mb-4">
+            <svg className="w-10 h-10 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8.228 9c.549-1.165 2.03-2 3.772-2 2.21 0 4 1.343 4 3 0 1.4-1.278 2.575-3.006 2.907-.542.104-.994.54-.994 1.093m0 3h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
           </div>
+          <h3 className="text-2xl font-semibold text-gray-900 mb-2">Ready to Add Questions?</h3>
+          <p className="text-gray-600 mb-6">
+            You have {questions.length} question{questions.length !== 1 ? 's' : ''} ({totalPoints} points total).
+            Use the Question Creation Hub to add more questions.
+          </p>
+          <button
+            onClick={() => router.push(`/dashboard/exams/${examId}/questions`)}
+            className="btn btn-primary text-lg px-8 py-3"
+          >
+            Open Question Creation Hub
+          </button>
         </div>
+      )}
 
-        {!exam.isPaid && (
-          <div className="p-6 bg-yellow-50 border-b border-yellow-100">
-            <p className="text-sm text-yellow-800">
-              Payment is required before you can add questions to this exam.
-            </p>
-          </div>
-        )}
-
-        <div className="divide-y divide-gray-100">
-          {questions.length === 0 ? (
-            <div className="p-6 text-center text-gray-500">
-              <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-              </svg>
-              <p>No questions yet. Click "Add Question" to get started.</p>
-            </div>
-          ) : (
-            questions.map((question, index) => (
-              <div key={question._id} className="p-6 hover:bg-gray-50 transition-colors">
-                <div className="flex items-start gap-4">
-                  <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                    <span className="text-sm font-medium text-blue-700">{index + 1}</span>
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 mb-2">
-                      <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                        question.type === 'mcq' ? 'bg-purple-100 text-purple-800' : 'bg-orange-100 text-orange-800'
-                      }`}>
-                        {question.type === 'mcq' ? 'MCQ' : 'Essay'}
-                      </span>
-                      <span className="text-xs text-gray-500">{question.points} pt{question.points !== 1 ? 's' : ''}</span>
-                    </div>
-                    <p className="text-sm text-gray-900 mb-2">{question.questionText}</p>
-
-                    {question.type === 'mcq' && question.options.length > 0 && (
-                      <div className="grid grid-cols-2 gap-2 mb-2">
-                        {question.options.map((opt) => (
-                          <div
-                            key={opt.label}
-                            className={`text-xs px-2 py-1 rounded ${
-                              opt.label === question.correctAnswer
-                                ? 'bg-green-50 text-green-700 border border-green-200'
-                                : 'bg-gray-50 text-gray-600 border border-gray-200'
-                            }`}
-                          >
-                            <span className="font-medium">{opt.label}.</span> {opt.text}
-                            {opt.label === question.correctAnswer && (
-                              <span className="ml-1">✓</span>
-                            )}
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {question.type === 'essay' && question.markingScheme && (
-                      <div className="bg-blue-50 border border-blue-100 rounded p-2 mb-2">
-                        <p className="text-xs font-medium text-blue-700 mb-1">Marking Rubric:</p>
-                        <p className="text-xs text-blue-600 whitespace-pre-wrap">{question.markingScheme}</p>
-                      </div>
-                    )}
-                  </div>
-                  <div className="flex-shrink-0 flex gap-2">
-                    <button
-                      onClick={() => handleEditQuestion(question)}
-                      className="text-gray-400 hover:text-blue-600 transition-colors"
-                      title="Edit question"
-                    >
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                      </svg>
-                    </button>
-                    {deleteConfirmId === question._id ? (
-                      <div className="flex gap-1">
-                        <button
-                          onClick={() => handleDeleteQuestion(question._id)}
-                          className="text-red-600 text-xs font-medium hover:text-red-800"
-                        >
-                          Delete
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmId(null)}
-                          className="text-gray-400 text-xs hover:text-gray-600"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    ) : (
-                      <button
-                        onClick={() => setDeleteConfirmId(question._id)}
-                        className="text-gray-400 hover:text-red-600 transition-colors"
-                        title="Delete question"
-                      >
-                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
+      {!exam.isPaid && (
+        <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-8 text-center">
+          <svg className="w-16 h-16 text-yellow-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+          </svg>
+          <h3 className="text-xl font-semibold text-gray-900 mb-2">Payment Required</h3>
+          <p className="text-gray-600 mb-4">
+            Complete payment to add questions to this exam.
+          </p>
+          <button
+            onClick={() => router.push(`/dashboard/exams/${examId}`)}
+            className="btn btn-primary"
+          >
+            Complete Payment
+          </button>
         </div>
-      </div>
+      )}
 
       {/* Bulk Import Modal */}
       {showBulkImport && (
@@ -988,7 +912,7 @@ The more detail you provide, the better the generated questions will be.`}
                 previewQuestions.map((q, index) => (
                   <div key={index} className="p-6 hover:bg-gray-50 transition-colors">
                     {editingPreviewIndex === index ? (
-                      /* Inline Edit Mode */
+                      // Inline Edit Mode
                       <div className="space-y-3">
                         <div className="flex items-center gap-2 mb-2">
                           <span className="text-sm font-medium text-gray-700">Editing Q{index + 1}</span>
@@ -1058,7 +982,7 @@ The more detail you provide, the better the generated questions will be.`}
                         </div>
                       </div>
                     ) : (
-                      /* View Mode */
+                      // View Mode
                       <div className="flex items-start gap-4">
                         <div className="flex-shrink-0 w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
                           <span className="text-sm font-medium text-blue-700">{index + 1}</span>
@@ -1110,7 +1034,7 @@ The more detail you provide, the better the generated questions will be.`}
                             title="Remove"
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a2 2 0 00-1-1h-4a2 2 0 00-1 1v3M4 7h16" />
                             </svg>
                           </button>
                         </div>

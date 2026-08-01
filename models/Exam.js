@@ -68,6 +68,8 @@ const examSchema = new mongoose.Schema(
       type: Boolean,
       default: true,
     },
+    draftQuestions: [{ type: Object }],
+    draftSavedAt: Date,
   },
   {
     timestamps: true,

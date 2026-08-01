@@ -52,7 +52,6 @@ interface ExamFormData {
   // Step 5: Payment
   numberOfCandidates: number;
   price: number;
-  paymentMethod: string;
   
   // Step 6: Questions
   questions: any[];
@@ -105,7 +104,6 @@ export default function CreateExamPage() {
     certificateAfterCompletion: false,
     numberOfCandidates: 1,
     price: 100,
-    paymentMethod: 'paystack',
     questions: [],
   });
 
@@ -133,8 +131,19 @@ export default function CreateExamPage() {
     }
   };
 
+  const calculatePrice = (candidates: number): number => {
+    if (candidates <= 120) {
+      return 100;
+    }
+    return 100 + (candidates - 120) * 1;
+  };
+
   const updateFormData = (updates: Partial<ExamFormData>) => {
-    setFormData({ ...formData, ...updates });
+    const newData = { ...formData, ...updates };
+    if (updates.numberOfCandidates !== undefined) {
+      newData.price = calculatePrice(updates.numberOfCandidates);
+    }
+    setFormData(newData);
   };
 
   const nextStep = () => {
@@ -856,12 +865,12 @@ export default function CreateExamPage() {
                   value={formData.numberOfCandidates}
                   onChange={(e) => {
                     const count = parseInt(e.target.value) || 1;
-                    updateFormData({ 
-                      numberOfCandidates: count,
-                      price: count * 100 // GHS 100 per candidate
-                    });
+                    updateFormData({ numberOfCandidates: count });
                   }}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  Up to 120 candidates: GHS 100 | Additional candidates: GHS 1 each
+                </p>
               </div>
 
               <div className="bg-blue-50 border border-blue-200 rounded-lg p-6">
@@ -872,9 +881,15 @@ export default function CreateExamPage() {
                     <span className="font-medium">{formData.numberOfCandidates}</span>
                   </div>
                   <div className="flex justify-between">
-                    <span className="text-gray-600">Price per Candidate</span>
+                    <span className="text-gray-600">Base Price (up to 120)</span>
                     <span className="font-medium">GHS 100</span>
                   </div>
+                  {formData.numberOfCandidates > 120 && (
+                    <div className="flex justify-between">
+                      <span className="text-gray-600">Additional Candidates ({formData.numberOfCandidates - 120} × GHS 1)</span>
+                      <span className="font-medium">GHS {formData.numberOfCandidates - 120}</span>
+                    </div>
+                  )}
                   <div className="border-t border-blue-200 pt-3 flex justify-between text-lg">
                     <span className="font-semibold">Total</span>
                     <span className="font-bold text-blue-600">GHS {formData.price}</span>
@@ -882,17 +897,18 @@ export default function CreateExamPage() {
                 </div>
               </div>
 
-              <div>
-                <label className="label">Payment Method</label>
-                <select
-                  className="input mt-1"
-                  value={formData.paymentMethod}
-                  onChange={(e) => updateFormData({ paymentMethod: e.target.value })}
-                >
-                  <option value="paystack">Paystack</option>
-                  <option value="mobile_money">Mobile Money</option>
-                  <option value="bank_transfer">Bank Transfer</option>
-                </select>
+              <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <svg className="w-5 h-5 text-blue-600 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <div>
+                    <p className="text-sm font-medium text-blue-900">Payment via Paystack</p>
+                    <p className="text-xs text-blue-700 mt-1">
+                      You will be redirected to Paystack's secure payment gateway to complete your payment.
+                    </p>
+                  </div>
+                </div>
               </div>
 
               <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
