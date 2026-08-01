@@ -45,7 +45,17 @@ export async function POST(request, { params }) {
     }
 
     // Run the AI-powered parsing pipeline
-    const parseResult = await parseQuestions(text, examFormat || exam.format || 'hybrid');
+    let parseResult;
+    try {
+      parseResult = await parseQuestions(text);
+    } catch (parseError) {
+      console.error('Parser crashed:', parseError);
+      return NextResponse.json({
+        error: 'Failed to parse questions',
+        details: parseError.message,
+        stack: parseError.stack
+      }, { status: 500 });
+    }
 
     let savedCount = 0;
     const createdQuestions = [];
@@ -85,7 +95,7 @@ export async function POST(request, { params }) {
       debug: {
         sectionsDetected: parseResult.sections?.length || 0,
         sectionTypes: parseResult.sections?.map(s => ({ type: s.type, lines: s.endLine - s.startLine + 1 })) || [],
-        qualityScore: quality.score,
+        qualityScore: parseResult.qualityScore || 0,
       }
     };
     
