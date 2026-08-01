@@ -68,8 +68,12 @@ export async function POST(request) {
     await dbConnect();
     const { examId, surname, firstName, className, answers } = await request.json();
 
-    if (!examId || !surname || !firstName || !answers) {
+    if (!examId || !surname || !firstName) {
       return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+    }
+
+    if (!answers || !Array.isArray(answers)) {
+      return NextResponse.json({ error: 'Invalid answers format' }, { status: 400 });
     }
 
     const exam = await Exam.findById(examId);

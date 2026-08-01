@@ -41,7 +41,7 @@ export async function POST(request, { params }) {
       const q = questions[i];
 
       // Validate required fields
-      if (!q.type || !['mcq', 'essay'].includes(q.type)) {
+      if (!q.type || !['mcq', 'essay', 'true_false', 'fill_blank', 'short_answer'].includes(q.type)) {
         errors.push(`Question ${i + 1}: Invalid type "${q.type}"`);
         continue;
       }

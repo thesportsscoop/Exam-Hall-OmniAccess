@@ -34,7 +34,10 @@ export async function POST(request) {
     }
 
     // Validate class if classes are specified
-    if (exam.classes.length > 0 && className) {
+    if (exam.classes.length > 0) {
+      if (!className) {
+        return NextResponse.json({ error: 'Please select your class' }, { status: 400 });
+      }
       if (!exam.classes.includes(className)) {
         return NextResponse.json({ error: 'Your class is not eligible for this exam' }, { status: 403 });
       }
