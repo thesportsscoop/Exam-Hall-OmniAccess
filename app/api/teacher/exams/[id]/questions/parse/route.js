@@ -3,7 +3,7 @@ import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
 import Question from '@/models/Question';
 import { getAuthUser } from '@/lib/auth';
-import { parseQuestions } from '@/lib/ai-parser.js';
+import { parseQuestions } from '@/lib/question-parser/index.js';
 
 export const dynamic = 'force-dynamic';
 
