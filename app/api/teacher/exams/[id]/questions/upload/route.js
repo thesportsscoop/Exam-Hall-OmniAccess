@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import dbConnect from '@/lib/mongodb';
 import Exam from '@/models/Exam';
 import { getAuthUser } from '@/lib/auth';
-import { parseQuestions } from '@/lib/ai-parser.js';
+import { parseQuestions } from '@/lib/question-parser/index.js';
 
 export async function POST(request, { params }) {
   try {
