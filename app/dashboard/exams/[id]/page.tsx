@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import toast from 'react-hot-toast';
+import QuestionTemplate from '@/components/QuestionTemplate';
 
 interface Question {
   _id: string;
@@ -57,6 +58,7 @@ export default function ExamManagePage() {
   const [bulkText, setBulkText] = useState('');
   const [importing, setImporting] = useState(false);
   const [importTab, setImportTab] = useState<'paste' | 'upload' | 'generate'>('paste');
+  const [showTemplate, setShowTemplate] = useState(false);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [uploading, setUploading] = useState(false);
   const [generatePrompt, setGeneratePrompt] = useState('');
@@ -720,9 +722,17 @@ c) State two characteristics`}
                     onChange={(e) => setBulkText(e.target.value)}
                   />
                   <div className="mt-4 flex items-center justify-between">
-                    <p className="text-xs text-gray-500">
-                      {bulkText.split('\n').filter(l => l.trim()).length} lines · {bulkText.length} characters
-                    </p>
+                    <div className="flex items-center gap-3">
+                      <p className="text-xs text-gray-500">
+                        {bulkText.split('\n').filter(l => l.trim()).length} lines · {bulkText.length} characters
+                      </p>
+                      <button
+                        onClick={() => setShowTemplate(true)}
+                        className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                      >
+                        Use Template
+                      </button>
+                    </div>
                     <div className="flex gap-3">
                       <button
                         onClick={() => { setShowBulkImport(false); setBulkText(''); }}
@@ -1307,6 +1317,19 @@ The more detail you provide, the better the generated questions will be.`}
             </div>
           </div>
         </div>
+      )}
+
+      {/* Question Template Modal */}
+      {showTemplate && (
+        <QuestionTemplate
+          onClose={() => setShowTemplate(false)}
+          onUseTemplate={(templateText) => {
+            setBulkText(templateText);
+            setShowTemplate(false);
+            setImportTab('paste');
+            toast.success('Template loaded! Edit the questions and click Import.');
+          }}
+        />
       )}
     </div>
   );
