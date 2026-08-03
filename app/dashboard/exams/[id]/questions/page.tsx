@@ -122,7 +122,7 @@ export default function QuestionCreationHub() {
           issues.push({ severity: 'warning', message: `MCQ has only ${q.options.length} options (minimum 4)` });
         }
         if (!q.correctAnswer) {
-          issues.push({ severity: 'error', message: 'No correct answer selected' });
+          issues.push({ severity: 'warning', message: 'No correct answer selected - you can set this later' });
         }
       }
       
