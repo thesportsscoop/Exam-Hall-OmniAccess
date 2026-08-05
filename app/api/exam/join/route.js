@@ -41,9 +41,9 @@ export async function POST(request) {
       return NextResponse.json({ error: 'This exam is not currently active' }, { status: 403 });
     }
 
-    if (!exam.isPaid) {
-      return NextResponse.json({ error: 'Exam payment not completed' }, { status: 403 });
-    }
+    // NOTE: isPaid is a teacher-side payment concern and should NOT block
+    // students from accessing an exam. If a teacher created an exam, it's
+    // accessible to students with the correct passkey.
 
     const now = new Date();
     if (now < exam.startTime) {
