@@ -17,6 +17,26 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Invalid passkey' }, { status: 404 });
     }
 
+    // Passkey check mode: when surname/firstName are 'check', just return exam info
+    // (used by the join page to pre-fill available classes on passkey blur)
+    const isCheckMode = surname === 'check' && firstName === 'check';
+    if (isCheckMode) {
+      return NextResponse.json({
+        exam: {
+          id: exam._id,
+          title: exam.title,
+          description: exam.description,
+          format: exam.format,
+          durationMinutes: exam.durationMinutes,
+          showResults: exam.showResults,
+          classes: exam.classes || [],
+          isActive: exam.isActive,
+          startTime: exam.startTime,
+          endTime: exam.endTime,
+        },
+      });
+    }
+
     if (!exam.isActive) {
       return NextResponse.json({ error: 'This exam is not currently active' }, { status: 403 });
     }

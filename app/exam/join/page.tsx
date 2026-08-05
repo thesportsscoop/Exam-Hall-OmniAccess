@@ -25,8 +25,12 @@ export default function JoinExamPage() {
       });
       const data = await res.json();
 
-      if (res.ok && data.exam?.classes?.length > 0) {
-        setAvailableClasses(data.exam.classes);
+      if (res.ok && data.exam) {
+        setAvailableClasses(data.exam.classes || []);
+        // If only one class, auto-select it
+        if (data.exam.classes?.length === 1) {
+          setClassName(data.exam.classes[0]);
+        }
       } else {
         setAvailableClasses([]);
       }
