@@ -55,6 +55,12 @@ export default function ExamPage() {
 
   const handleSubmit = async () => {
     if (submitting) return;
+    // Don't submit if student data isn't loaded yet
+    if (!student || !student.surname || !student.firstName) {
+      toast.error('Student information not loaded. Please wait...');
+      setSubmitting(false);
+      return;
+    }
     setSubmitting(true);
 
     try {
@@ -68,9 +74,9 @@ export default function ExamPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           examId,
-          surname: student?.surname,
-          firstName: student?.firstName,
-          className: student?.className,
+          surname: student.surname,
+          firstName: student.firstName,
+          className: student.className,
           answers: answerArray,
         }),
       });
@@ -136,7 +142,8 @@ export default function ExamPage() {
 
   useEffect(() => {
     if (timeLeft <= 0) {
-      if (!submitting) handleSubmit();
+      // Only auto-submit if student data is loaded
+      if (!submitting && student) handleSubmit();
       return;
     }
 
@@ -145,7 +152,7 @@ export default function ExamPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, submitting]);
+  }, [timeLeft, submitting, student]);
 
   const answeredCount = Object.keys(answers).length;
 
