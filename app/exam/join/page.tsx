@@ -14,31 +14,6 @@ export default function JoinExamPage() {
   const [loading, setLoading] = useState(false);
   const [availableClasses, setAvailableClasses] = useState<string[]>([]);
 
-  const handlePasskeyBlur = async () => {
-    if (!passkey.trim() || passkey.trim().length < 4) return;
-
-    try {
-      const res = await fetch('/api/exam/join', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ surname: 'check', firstName: 'check', passkey: passkey.trim() }),
-      });
-      const data = await res.json();
-
-      if (res.ok && data.exam) {
-        setAvailableClasses(data.exam.classes || []);
-        // If only one class, auto-select it
-        if (data.exam.classes?.length === 1) {
-          setClassName(data.exam.classes[0]);
-        }
-      } else {
-        setAvailableClasses([]);
-      }
-    } catch (error) {
-      // Silent fail - will validate on submit
-    }
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -71,8 +46,18 @@ export default function JoinExamPage() {
 
       const data = await res.json();
 
+      // If the exam requires a class and none was provided, surface the class
+      // dropdown so the student can pick one, rather than failing outright.
+      if (res.status === 400 && data.requiredClass && data.classes?.length > 0) {
+        setAvailableClasses(data.classes);
+        toast.error(data.error || 'Please select your class');
+        setLoading(false);
+        return;
+      }
+
       if (!res.ok) {
         toast.error(data.error || 'Failed to join exam');
+        setLoading(false);
         return;
       }
 
@@ -84,7 +69,6 @@ export default function JoinExamPage() {
       router.push(`/exam/${data.exam.id}`);
     } catch (error) {
       toast.error('Failed to join exam');
-    } finally {
       setLoading(false);
     }
   };
@@ -167,7 +151,6 @@ export default function JoinExamPage() {
               placeholder="Enter passkey"
               value={passkey}
               onChange={(e) => setPasskey(e.target.value.toUpperCase())}
-              onBlur={handlePasskeyBlur}
               maxLength={20}
             />
             <p className="text-xs text-gray-500 mt-2 text-center">
