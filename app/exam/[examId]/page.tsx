@@ -7,7 +7,7 @@ import toast from 'react-hot-toast';
 
 interface Question {
   id: string;
-  type: 'mcq' | 'essay';
+  type: 'mcq' | 'essay' | 'true_false' | 'fill_blank' | 'short_answer';
   questionText: string;
   options: { label: string; text: string }[];
   points: number;
@@ -192,12 +192,12 @@ export default function ExamPage() {
                   <div key={q.questionId} className="bg-gray-50 rounded-lg p-4">
                     <div className="flex items-start justify-between mb-2">
                       <p className="text-sm font-medium text-gray-900">Question {i + 1}</p>
-                      <span className={`text-sm font-medium ${q.type === 'mcq' ? (q.isCorrect ? 'text-green-600' : 'text-red-600') : 'text-blue-600'}`}>
+                      <span className={`text-sm font-medium ${q.type === 'mcq' || q.type === 'true_false' || q.type === 'fill_blank' ? (q.isCorrect ? 'text-green-600' : 'text-red-600') : 'text-blue-600'}`}>
                         {q.pointsAwarded}/{q.maxPoints} pts
                       </span>
                     </div>
                     <p className="text-sm text-gray-700 mb-2">{q.questionText}</p>
-                    {q.type === 'mcq' ? (
+                    {q.type === 'mcq' || q.type === 'true_false' || q.type === 'fill_blank' ? (
                       <div className="text-xs space-y-1">
                         <p className={q.isCorrect ? 'text-green-600' : 'text-red-600'}>
                           Your answer: {q.studentAnswer || '(No answer)'}
@@ -233,6 +233,8 @@ export default function ExamPage() {
       </div>
     );
   }
+
+  const currentQuestion = questions[currentQuestionIndex];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -287,28 +289,28 @@ export default function ExamPage() {
                   </div>
                   <div className="flex-1">
                     <div className="flex items-center gap-2 mb-2">
-                      <span className="text-xs font-medium text-gray-500 uppercase">{questions[currentQuestionIndex].type}</span>
-                      <span className="text-xs text-gray-400">{questions[currentQuestionIndex].points} pts</span>
+                      <span className="text-xs font-medium text-gray-500 uppercase">{currentQuestion.type}</span>
+                      <span className="text-xs text-gray-400">{currentQuestion.points} pts</span>
                     </div>
-                    <p className="text-gray-900">{questions[currentQuestionIndex].questionText}</p>
+                    <p className="text-gray-900">{currentQuestion.questionText}</p>
                   </div>
                 </div>
 
-                {questions[currentQuestionIndex].type === 'mcq' && (
+                {currentQuestion.type === 'mcq' && (
                   <div className="space-y-2 ml-11">
-                    {questions[currentQuestionIndex].options.map((opt) => (
+                    {currentQuestion.options.map((opt) => (
                       <label
                         key={opt.label}
                         className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                          answers[questions[currentQuestionIndex].id] === opt.label ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                          answers[currentQuestion.id] === opt.label ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
                         }`}
                       >
                         <input
                           type="radio"
-                          name={`q-${questions[currentQuestionIndex].id}`}
+                          name={`q-${currentQuestion.id}`}
                           value={opt.label}
-                          checked={answers[questions[currentQuestionIndex].id] === opt.label}
-                          onChange={(e) => handleAnswer(questions[currentQuestionIndex].id, e.target.value)}
+                          checked={answers[currentQuestion.id] === opt.label}
+                          onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
                           className="w-4 h-4 text-blue-600"
                         />
                         <span className="text-sm font-medium text-gray-700">{opt.label}.</span>
@@ -318,14 +320,49 @@ export default function ExamPage() {
                   </div>
                 )}
 
-                {questions[currentQuestionIndex].type === 'essay' && (
+                {currentQuestion.type === 'true_false' && (
+                  <div className="space-y-2 ml-11">
+                    {['True', 'False'].map((opt) => (
+                      <label
+                        key={opt}
+                        className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
+                          answers[currentQuestion.id] === opt ? 'border-blue-500 bg-blue-50' : 'border-gray-200 hover:bg-gray-50'
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name={`q-${currentQuestion.id}`}
+                          value={opt}
+                          checked={answers[currentQuestion.id] === opt}
+                          onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
+                          className="w-4 h-4 text-blue-600"
+                        />
+                        <span className="text-sm font-medium text-gray-700">{opt}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+
+                {currentQuestion.type === 'fill_blank' && (
+                  <div className="ml-11">
+                    <input
+                      type="text"
+                      className="input w-full"
+                      placeholder="Type your answer here..."
+                      value={answers[currentQuestion.id] || ''}
+                      onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
+                    />
+                  </div>
+                )}
+
+                {(currentQuestion.type === 'essay' || currentQuestion.type === 'short_answer') && (
                   <div className="ml-11">
                     <textarea
-                      rows={8}
+                      rows={currentQuestion.type === 'short_answer' ? 4 : 8}
                       className="input w-full"
-                      placeholder="Write your answer here..."
-                      value={answers[questions[currentQuestionIndex].id] || ''}
-                      onChange={(e) => handleAnswer(questions[currentQuestionIndex].id, e.target.value)}
+                      placeholder={currentQuestion.type === 'short_answer' ? 'Type a brief answer here...' : 'Write your answer here...'}
+                      value={answers[currentQuestion.id] || ''}
+                      onChange={(e) => handleAnswer(currentQuestion.id, e.target.value)}
                     />
                   </div>
                 )}

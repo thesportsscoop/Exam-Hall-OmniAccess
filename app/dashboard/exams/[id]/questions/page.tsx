@@ -126,6 +126,10 @@ export default function QuestionCreationHub() {
         }
       }
       
+      if ((q.type === 'true_false' || q.type === 'fill_blank') && !q.correctAnswer.trim()) {
+        issues.push({ severity: 'warning', message: 'No correct answer set' });
+      }
+      
       if ((q.type === 'essay' || q.type === 'short_answer') && !q.markingScheme.trim()) {
         issues.push({ severity: 'warning', message: 'No marking rubric provided' });
       }
@@ -863,6 +867,40 @@ The more detail you provide, the better the generated questions will be."
                         </div>
                       )}
 
+                      {question.type === 'true_false' && (
+                        <div>
+                          <label className="label">Correct Answer</label>
+                          <div className="flex gap-3 mt-1">
+                            {['True', 'False'].map((opt) => (
+                              <button
+                                key={opt}
+                                onClick={() => updateQuestion(index, { correctAnswer: opt })}
+                                className={`px-4 py-2 rounded-lg text-sm font-medium border transition-colors ${
+                                  question.correctAnswer === opt
+                                    ? 'bg-green-50 border-green-300 text-green-700'
+                                    : 'bg-white border-gray-200 text-gray-500 hover:border-gray-300'
+                                }`}
+                              >
+                                {question.correctAnswer === opt ? '✓ ' : ''}{opt}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+
+                      {question.type === 'fill_blank' && (
+                        <div>
+                          <label className="label">Correct Answer</label>
+                          <input
+                            type="text"
+                            className="input mt-1"
+                            value={question.correctAnswer}
+                            onChange={(e) => updateQuestion(index, { correctAnswer: e.target.value })}
+                            placeholder="Enter the correct answer"
+                          />
+                        </div>
+                      )}
+
                       {(question.type === 'essay' || question.type === 'short_answer') && (
                         <div>
                           <label className="label">Marking Rubric</label>
@@ -963,6 +1001,13 @@ The more detail you provide, the better the generated questions will be."
                               {opt.label === question.correctAnswer && <span className="ml-2">✓</span>}
                             </div>
                           ))}
+                        </div>
+                      )}
+
+                      {(question.type === 'true_false' || question.type === 'fill_blank') && question.correctAnswer && (
+                        <div className="bg-green-50 border border-green-100 rounded p-3 mb-3">
+                          <p className="text-xs font-medium text-green-700 mb-1">Correct Answer:</p>
+                          <p className="text-xs text-green-600">{question.correctAnswer}</p>
                         </div>
                       )}
 

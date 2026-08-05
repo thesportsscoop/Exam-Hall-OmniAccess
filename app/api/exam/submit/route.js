@@ -63,6 +63,73 @@ function scoreEssay(answer, markingScheme, maxPoints) {
   return { points: finalPoints, matchedKeywords, feedback };
 }
 
+// Short answer scoring - simpler keyword matching
+function scoreShortAnswer(answer, markingScheme, maxPoints) {
+  if (!answer || !answer.trim()) {
+    return { points: 0, matchedKeywords: [], feedback: 'No answer provided' };
+  }
+
+  // Parse marking scheme for keywords
+  const keywords = [];
+  const schemeParts = markingScheme.split(/[,;\n]/);
+  
+  for (const part of schemeParts) {
+    const match = part.match(/(.+?):\s*(\d+)\s*pts?/i);
+    if (match) {
+      keywords.push({ term: match[1].trim().toLowerCase(), points: parseInt(match[2]) });
+    } else if (part.trim()) {
+      keywords.push({ term: part.trim().toLowerCase(), points: 1 });
+    }
+  }
+
+  // If no keywords parsed, use word count scoring
+  if (keywords.length === 0) {
+    const wordCount = answer.trim().split(/\s+/).length;
+    if (wordCount >= 10) return { points: maxPoints, matchedKeywords: [], feedback: 'Good answer' };
+    if (wordCount >= 3) return { points: Math.round(maxPoints * 0.5), matchedKeywords: [], feedback: 'Brief answer' };
+    return { points: 0, matchedKeywords: [], feedback: 'Insufficient answer' };
+  }
+
+  const answerLower = answer.toLowerCase();
+  const matchedKeywords = [];
+  let totalEarned = 0;
+  let maxPossible = 0;
+
+  for (const kw of keywords) {
+    maxPossible += kw.points;
+    if (answerLower.includes(kw.term)) {
+      matchedKeywords.push(kw.term);
+      totalEarned += kw.points;
+    }
+  }
+
+  const finalPoints = Math.min(totalEarned, maxPoints);
+  const percentage = maxPossible > 0 ? (totalEarned / maxPossible) * 100 : 0;
+
+  let feedback = '';
+  if (percentage >= 80) feedback = 'Excellent - covered most key points';
+  else if (percentage >= 60) feedback = 'Good - covered main points';
+  else if (percentage >= 40) feedback = 'Fair - some key points missing';
+  else if (percentage > 0) feedback = 'Needs improvement - key points missing';
+  else feedback = 'No key points identified';
+
+  return { points: finalPoints, matchedKeywords, feedback };
+}
+
+// Fill blank scoring - case-insensitive exact match
+function scoreFillBlank(answer, correctAnswer, maxPoints) {
+  if (!answer || !answer.trim()) {
+    return { points: 0, isCorrect: false, feedback: 'No answer provided' };
+  }
+
+  const isCorrect = answer.trim().toLowerCase() === (correctAnswer || '').trim().toLowerCase();
+  return {
+    points: isCorrect ? maxPoints : 0,
+    isCorrect,
+    feedback: isCorrect ? 'Correct' : 'Incorrect',
+  };
+}
+
 export async function POST(request) {
   try {
     await dbConnect();
@@ -115,6 +182,78 @@ export async function POST(request) {
           isCorrect,
           pointsAwarded,
           maxPoints: q.points,
+        });
+      } else if (q.type === 'true_false') {
+        // True/False: Compare to correct answer (True/False)
+        const isCorrect = answerText.toLowerCase() === (q.correctAnswer || '').toLowerCase();
+        const pointsAwarded = isCorrect ? q.points : 0;
+        if (isCorrect) score += q.points;
+
+        gradedAnswers.push({
+          questionId: q._id,
+          answer: answerText,
+          isCorrect,
+          pointsAwarded,
+          feedback: isCorrect ? 'Correct' : 'Incorrect',
+        });
+
+        breakdown.push({
+          questionId: q._id,
+          type: 'true_false',
+          questionText: q.questionText,
+          studentAnswer: answerText,
+          correctAnswer: q.correctAnswer,
+          isCorrect,
+          pointsAwarded,
+          maxPoints: q.points,
+        });
+      } else if (q.type === 'fill_blank') {
+        // Fill in the blank: Case-insensitive exact match
+        const result = scoreFillBlank(answerText, q.correctAnswer, q.points);
+        score += result.points;
+
+        gradedAnswers.push({
+          questionId: q._id,
+          answer: answerText,
+          isCorrect: result.isCorrect,
+          pointsAwarded: result.points,
+          feedback: result.feedback,
+        });
+
+        breakdown.push({
+          questionId: q._id,
+          type: 'fill_blank',
+          questionText: q.questionText,
+          studentAnswer: answerText,
+          correctAnswer: q.correctAnswer,
+          isCorrect: result.isCorrect,
+          pointsAwarded: result.points,
+          maxPoints: q.points,
+        });
+      } else if (q.type === 'short_answer') {
+        // Short answer: Keyword matching with simpler scoring
+        const result = scoreShortAnswer(answerText, q.markingScheme, q.points);
+        score += result.points;
+
+        gradedAnswers.push({
+          questionId: q._id,
+          answer: answerText,
+          isCorrect: null,
+          pointsAwarded: result.points,
+          feedback: result.feedback,
+          matchedKeywords: result.matchedKeywords,
+        });
+
+        breakdown.push({
+          questionId: q._id,
+          type: 'short_answer',
+          questionText: q.questionText,
+          studentAnswer: answerText,
+          markingScheme: q.markingScheme,
+          pointsAwarded: result.points,
+          maxPoints: q.points,
+          matchedKeywords: result.matchedKeywords,
+          feedback: result.feedback,
         });
       } else {
         // Essay/Hybrid: Keyword-matching and partial-credit algorithm

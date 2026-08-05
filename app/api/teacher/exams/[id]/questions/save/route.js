@@ -79,8 +79,8 @@ export async function POST(request, { params }) {
           type: q.type,
           questionText: q.questionText.trim(),
           options: q.type === 'mcq' ? (q.options || []) : [],
-          correctAnswer: q.type === 'mcq' ? (q.correctAnswer || '') : '',
-          markingScheme: q.type === 'essay' ? (q.markingScheme || '') : '',
+          correctAnswer: ['mcq', 'true_false', 'fill_blank'].includes(q.type) ? (q.correctAnswer || '') : '',
+          markingScheme: ['essay', 'short_answer'].includes(q.type) ? (q.markingScheme || '') : '',
           points: q.points || 1,
         });
 
