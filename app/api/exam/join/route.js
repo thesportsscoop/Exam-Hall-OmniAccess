@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import Exam from '@/models/Exam';
 import Question from '@/models/Question';
+import Submission from '@/models/Submission';
 import dbConnect from '@/lib/mongodb';
 
 export async function POST(request) {
@@ -53,6 +54,16 @@ export async function POST(request) {
       return NextResponse.json({ error: 'Exam has ended' }, { status: 403 });
     }
 
+    // Enforce maxAttempts using composite key including classGroup
+    const existingSubmissions = await Submission.countDocuments({
+      examId: exam._id,
+      studentName: { $regex: `^${surname} ${firstName}$`, $options: 'i' },
+      classGroup: className || '',
+    });
+    if (existingSubmissions >= (exam.maxAttempts || 1)) {
+      return NextResponse.json({ error: 'You have already used all allowed attempts for this exam.' }, { status: 403 });
+    }
+
     // Validate class if classes are specified
     if (exam.classes && exam.classes.length > 0) {
       if (!className) {
@@ -78,6 +89,27 @@ export async function POST(request) {
         durationMinutes: exam.durationMinutes,
         showResults: exam.showResults,
         classes: exam.classes,
+        // Step 2: Availability
+        availabilityType: exam.availabilityType,
+        lateSubmissionPolicy: exam.lateSubmissionPolicy,
+        // Step 3: Access & Security
+        maxAttempts: exam.maxAttempts,
+        oneDeviceOnly: exam.oneDeviceOnly,
+        randomizeQuestions: exam.randomizeQuestions,
+        randomizeOptions: exam.randomizeOptions,
+        shuffleStudents: exam.shuffleStudents,
+        showTimer: exam.showTimer,
+        autoSubmit: exam.autoSubmit,
+        preventCopyPaste: exam.preventCopyPaste,
+        requireFullscreen: exam.requireFullscreen,
+        // Step 4: Results
+        showScoreImmediately: exam.showScoreImmediately,
+        showCorrectAnswers: exam.showCorrectAnswers,
+        showExplanations: exam.showExplanations,
+        hideResults: exam.hideResults,
+        releaseResultsLater: exam.releaseResultsLater,
+        releaseDate: exam.releaseDate,
+        certificateAfterCompletion: exam.certificateAfterCompletion,
       },
       student: { surname, firstName, className },
       questions: questions.map(q => ({
@@ -86,6 +118,8 @@ export async function POST(request) {
         questionText: q.questionText,
         options: q.options,
         points: q.points,
+        correctAnswer: q.correctAnswer,
+        markingScheme: q.markingScheme,
       })),
     });
   } catch (error) {

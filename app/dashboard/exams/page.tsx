@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { redirect } from 'next/navigation';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
 
@@ -19,6 +20,7 @@ interface Exam {
 }
 
 export default function TeacherExamsPage() {
+  const router = useRouter();
   const [exams, setExams] = useState<Exam[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingExam, setEditingExam] = useState<Exam | null>(null);
@@ -203,8 +205,14 @@ export default function TeacherExamsPage() {
                     <td className="px-6 py-4 text-sm">
                       <div className="flex items-center gap-3">
                         <button
-                          onClick={() => handleEdit(exam)}
+                          onClick={() => router.push(`/dashboard/exams/${exam._id}/results`)}
                           className="text-blue-600 hover:text-blue-800 font-medium"
+                        >
+                          View Results
+                        </button>
+                        <button
+                          onClick={() => handleEdit(exam)}
+                          className="text-gray-600 hover:text-gray-800 font-medium"
                         >
                           Edit
                         </button>

@@ -286,15 +286,23 @@ export async function POST(request) {
     const studentName = `${surname} ${firstName}`;
     const allMcq = questions.every(q => q.type === 'mcq');
 
-    const submission = await Submission.create({
-      examId: exam._id,
-      studentName,
-      classGroup: className || '',
-      answers: gradedAnswers,
-      score,
-      maxScore,
-      isGraded: true, // Auto-graded by the engine
-    });
+    let submission;
+    try {
+      submission = await Submission.create({
+        examId: exam._id,
+        studentName,
+        classGroup: className || '',
+        answers: gradedAnswers,
+        score,
+        maxScore,
+        isGraded: true, // Auto-graded by the engine
+      });
+    } catch (createError) {
+      if (createError.code === 11000) {
+        return NextResponse.json({ error: 'You have already submitted this exam.' }, { status: 403 });
+      }
+      throw createError;
+    }
 
     const percentage = maxScore > 0 ? Math.round((score / maxScore) * 100) : 0;
 

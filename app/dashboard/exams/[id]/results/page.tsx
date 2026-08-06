@@ -12,6 +12,7 @@ interface Submission {
   maxScore: number;
   isGraded: boolean;
   submittedAt: string;
+  answers?: any[];
 }
 
 interface Analytics {
@@ -19,6 +20,17 @@ interface Analytics {
   avgScore: number;
   avgPercentage: number;
   distribution: Record<string, number>;
+}
+
+interface ClassResults {
+  className: string;
+  submissions: Submission[];
+  analytics: {
+    totalSubmissions: number;
+    avgScore: number;
+    avgPercentage: number;
+    distribution: Record<string, number>;
+  };
 }
 
 export default function ResultsPage() {
@@ -29,8 +41,11 @@ export default function ResultsPage() {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [byClass, setByClass] = useState<Record<string, Submission[]>>({});
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
+  const [classResults, setClassResults] = useState<ClassResults[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedClass, setSelectedClass] = useState<string>('all');
+  const [selectedStudent, setSelectedStudent] = useState<Submission | null>(null);
+  const [studentDetailOpen, setStudentDetailOpen] = useState(false);
 
   useEffect(() => {
     fetchResults();
@@ -47,6 +62,50 @@ export default function ResultsPage() {
       setSubmissions(data.submissions);
       setByClass(data.byClass);
       setAnalytics(data.analytics);
+
+      const classEntries = Object.entries(data.byClass || {});
+      const results: ClassResults[] = classEntries.map(([className, classSubs]) => {
+        const subs = classSubs as Submission[];
+        const totalSubmissions = subs.length;
+        const avgScore = totalSubmissions > 0
+          ? Math.round(subs.reduce((sum, s) => sum + s.score, 0) / totalSubmissions)
+          : 0;
+        const avgPercentage = totalSubmissions > 0
+          ? Math.round(subs.reduce((sum, s) => sum + (s.maxScore > 0 ? (s.score / s.maxScore) * 100 : 0), 0) / totalSubmissions)
+          : 0;
+
+        const distribution = {
+          '90-100': 0,
+          '80-89': 0,
+          '70-79': 0,
+          '60-69': 0,
+          '50-59': 0,
+          '0-49': 0,
+        };
+
+        subs.forEach((s) => {
+          const pct = s.maxScore > 0 ? (s.score / s.maxScore) * 100 : 0;
+          if (pct >= 90) distribution['90-100']++;
+          else if (pct >= 80) distribution['80-89']++;
+          else if (pct >= 70) distribution['70-79']++;
+          else if (pct >= 60) distribution['60-69']++;
+          else if (pct >= 50) distribution['50-59']++;
+          else distribution['0-49']++;
+        });
+
+        return {
+          className,
+          submissions: subs,
+          analytics: {
+            totalSubmissions,
+            avgScore,
+            avgPercentage,
+            distribution,
+          },
+        };
+      });
+
+      setClassResults(results);
     } catch (error) {
       toast.error('Failed to load results');
     } finally {
@@ -54,24 +113,58 @@ export default function ResultsPage() {
     }
   };
 
-  const exportToCSV = () => {
-    const subsToExport = selectedClass === 'all' ? submissions : byClass[selectedClass] || [];
-
-    if (subsToExport.length === 0) {
-      toast.error('No data to export');
-      return;
+  const openStudentDetail = async (submissionId: string) => {
+    try {
+      const res = await fetch(`/api/teacher/exams/${examId}/submissions/${submissionId}`);
+      const data = await res.json();
+      if (!res.ok) {
+        toast.error(data.error || 'Failed to load student result');
+        return;
+      }
+      setSelectedStudent(data.submission);
+      setStudentDetailOpen(true);
+    } catch (error) {
+      toast.error('Failed to load student result');
     }
+  };
 
-    const headers = ['Student Name', 'Class', 'Score', 'Max Score', 'Percentage', 'Submitted At'];
-    const rows = subsToExport.map((s) => [
+  const closeStudentDetail = () => {
+    setStudentDetailOpen(false);
+    setSelectedStudent(null);
+  };
+
+  const getTableRows = (classSubs: Submission[], includeClass = false) => {
+    const headers = ['Student Name', 'Score', 'Max Score', 'Percentage', 'Submitted At'];
+    const rows = classSubs.map((s) => [
       s.studentName,
-      s.classGroup || 'No Class',
+      includeClass ? s.classGroup || 'No Class' : undefined,
       s.score,
       s.maxScore,
       s.maxScore > 0 ? Math.round((s.score / s.maxScore) * 100) + '%' : '0%',
       new Date(s.submittedAt).toLocaleString(),
     ]);
 
+    if (includeClass) {
+      headers.unshift('Class');
+      rows.forEach((row, idx) => {
+        const className = classSubs[idx]?.classGroup || 'No Class';
+        (row as any[]).splice(1, 0, className);
+      });
+    }
+
+    return { headers, rows };
+  };
+
+  const exportToCSV = (className?: string) => {
+    const classLabel = className || 'all';
+    const subsToExport = className ? (byClass[className] || []) : submissions;
+
+    if (subsToExport.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const { headers, rows } = getTableRows(subsToExport, className === 'all');
     const csvContent = [
       headers.join(','),
       ...rows.map((row) => row.map((cell) => `"${cell}"`).join(',')),
@@ -81,11 +174,220 @@ export default function ResultsPage() {
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `exam-results-${examId}${selectedClass !== 'all' ? `-${selectedClass}` : ''}.csv`;
+    link.download = `exam-results-${examId}${classLabel !== 'all' ? `-${classLabel}` : ''}.csv`;
     link.click();
     window.URL.revokeObjectURL(url);
 
-    toast.success('Results exported successfully');
+    toast.success(`Results exported successfully for ${classLabel === 'all' ? 'all classes' : classLabel}`);
+  };
+
+  const exportToExcel = (className?: string) => {
+    const classLabel = className || 'all';
+    const subsToExport = className ? (byClass[className] || []) : submissions;
+
+    if (subsToExport.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const { headers, rows } = getTableRows(subsToExport, className === 'all');
+
+    const buildTable = (title: string) => {
+      const style = `
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; }
+          th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
+          th { background: #f3f3f3; }
+          h2 { font-family: Arial, sans-serif; font-size: 16px; }
+        </style>
+      `;
+
+      const headerRow = headers.map((h) => `<th>${h}</th>`).join('');
+      const bodyRows = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ''}</td>`).join('')}</tr>`).join('');
+
+      return `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            ${style}
+          </head>
+          <body>
+            <h2>${title}</h2>
+            <table>
+              <thead><tr>${headerRow}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </body>
+        </html>
+      `;
+    };
+
+    const title = className ? `Exam Results - ${className}` : 'Exam Results - All Classes';
+    const html = buildTable(title);
+
+    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const url = window.URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `exam-results-${examId}${classLabel !== 'all' ? `-${classLabel}` : ''}.xls`;
+    link.click();
+    window.URL.revokeObjectURL(url);
+
+    toast.success(`Excel exported for ${classLabel === 'all' ? 'all classes' : classLabel}`);
+  };
+
+  const exportToPDF = (className?: string, singleStudent = false) => {
+    if (singleStudent && selectedStudent) {
+      const lines = [
+        `Student: ${selectedStudent.studentName}`,
+        `Class: ${selectedStudent.classGroup || 'No Class'}`,
+        `Score: ${selectedStudent.score}/${selectedStudent.maxScore}`,
+        `Percentage: ${selectedStudent.maxScore > 0 ? Math.round((selectedStudent.score / selectedStudent.maxScore) * 100) : 0}%`,
+        `Submitted: ${new Date(selectedStudent.submittedAt).toLocaleString()}`,
+      ];
+
+      if ((selectedStudent.answers?.length ?? 0) > 0) {
+        lines.push('', 'Answers:');
+        selectedStudent.answers!.forEach((a, idx) => {
+          const q = (a as any).question;
+          lines.push(`${idx + 1}. ${q?.questionText || 'Question'}`);
+          lines.push(`   Answer: ${a.answer}`);
+          if (a.pointsAwarded !== undefined && q?.points !== undefined) {
+            lines.push(`   Points: ${a.pointsAwarded}/${q.points}`);
+          }
+        });
+      }
+
+      const printWindow = window.open('', '_blank', 'width=1200,height=800');
+      if (!printWindow) {
+        toast.error('Popup blocked. Please allow popups to export PDF.');
+        return;
+      }
+
+      printWindow.document.open();
+      printWindow.document.write(`<pre style="font-family: Arial, sans-serif; font-size: 14px; white-space: pre-wrap;">${lines.join('\n')}</pre>`);
+      printWindow.document.close();
+      printWindow.onload = () => {
+        printWindow.print();
+        toast.success('PDF export opened');
+      };
+      return;
+    }
+
+    const classLabel = className || 'all';
+    const subsToExport = className ? (byClass[className] || []) : submissions;
+
+    if (subsToExport.length === 0) {
+      toast.error('No data to export');
+      return;
+    }
+
+    const { headers, rows } = getTableRows(subsToExport, className === 'all');
+
+    const buildTable = (title: string) => {
+      const style = `
+        <style>
+          table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; width: 100%; }
+          th, td { border: 1px solid #333; padding: 8px 10px; text-align: left; }
+          th { background: #f3f3f3; }
+          h2 { font-family: Arial, sans-serif; font-size: 18px; }
+          p { font-family: Arial, sans-serif; font-size: 12px; }
+        </style>
+      `;
+
+      const headerRow = headers.map((h) => `<th>${h}</th>`).join('');
+      const bodyRows = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ''}</td>`).join('')}</tr>`).join('');
+
+      return `
+        <html>
+          <head>
+            <meta charset="utf-8" />
+            ${style}
+          </head>
+          <body>
+            <h2>${title}</h2>
+            <p>Total students: ${subsToExport.length}</p>
+            <table>
+              <thead><tr>${headerRow}</tr></thead>
+              <tbody>${bodyRows}</tbody>
+            </table>
+          </body>
+        </html>
+      `;
+    };
+
+    const title = className ? `Exam Results - ${className}` : 'Exam Results - All Classes';
+    const html = buildTable(title);
+
+    const printWindow = window.open('', '_blank', 'width=1200,height=800');
+    if (!printWindow) {
+      toast.error('Popup blocked. Please allow popups to export PDF.');
+      return;
+    }
+
+    printWindow.document.open();
+    printWindow.document.write(html);
+    printWindow.document.close();
+
+    printWindow.onload = () => {
+      printWindow.print();
+      toast.success(`PDF export opened for ${classLabel === 'all' ? 'all classes' : classLabel}`);
+    };
+  };
+
+  const copyToClipboard = async (className?: string, singleStudent?: boolean) => {
+    if (singleStudent && selectedStudent) {
+      const lines = [
+        `Student: ${selectedStudent.studentName}`,
+        `Class: ${selectedStudent.classGroup || 'No Class'}`,
+        `Score: ${selectedStudent.score}/${selectedStudent.maxScore}`,
+        `Percentage: ${selectedStudent.maxScore > 0 ? Math.round((selectedStudent.score / selectedStudent.maxScore) * 100) : 0}%`,
+        `Submitted: ${new Date(selectedStudent.submittedAt).toLocaleString()}`,
+      ];
+
+      if ((selectedStudent.answers?.length ?? 0) > 0) {
+        lines.push('', 'Answers:');
+        selectedStudent.answers!.forEach((a, idx) => {
+          const q = (a as any).question;
+          lines.push(`${idx + 1}. ${q?.questionText || 'Question'}`);
+          lines.push(`   Answer: ${a.answer}`);
+          if (a.pointsAwarded !== undefined && q?.points !== undefined) {
+            lines.push(`   Points: ${a.pointsAwarded}/${q.points}`);
+          }
+        });
+      }
+
+      try {
+        await navigator.clipboard.writeText(lines.join('\n'));
+        toast.success('Student result copied');
+        return;
+      } catch (error) {
+        toast.error('Failed to copy result');
+        return;
+      }
+    }
+
+    const classLabel = className || 'all';
+    const subsToExport = className ? (byClass[className] || []) : submissions;
+
+    if (subsToExport.length === 0) {
+      toast.error('No data to copy');
+      return;
+    }
+
+    const { headers, rows } = getTableRows(subsToExport, className === 'all');
+
+    const tabSeparated = [
+      headers.join('\t'),
+      ...rows.map((row) => row.map((cell) => cell ?? '').join('\t')),
+    ].join('\n');
+
+    try {
+      await navigator.clipboard.writeText(tabSeparated);
+      toast.success(`Results copied for ${classLabel === 'all' ? 'all classes' : classLabel}`);
+    } catch (error) {
+      toast.error('Failed to copy results');
+    }
   };
 
   const getPercentageColor = (percentage: number) => {
@@ -119,11 +421,20 @@ export default function ResultsPage() {
       <div className="flex items-start justify-between mb-8">
         <div>
           <h1 className="text-3xl font-bold text-gray-900">Exam Results</h1>
-          <p className="text-gray-600 mt-1">Performance analytics and grade distribution</p>
+          <p className="text-gray-600 mt-1">Performance analytics and grade distribution by class</p>
         </div>
         <div className="flex gap-3">
-          <button onClick={exportToCSV} className="btn btn-outline text-sm">
+          <button onClick={() => exportToCSV()} className="btn btn-outline text-sm">
             Export CSV
+          </button>
+          <button onClick={() => exportToExcel()} className="btn btn-outline text-sm">
+            Export Excel
+          </button>
+          <button onClick={() => exportToPDF()} className="btn btn-outline text-sm">
+            Export PDF
+          </button>
+          <button onClick={() => copyToClipboard()} className="btn btn-outline text-sm">
+            Copy Results
           </button>
           <button
             onClick={() => router.push(`/dashboard/exams/${examId}`)}
@@ -134,7 +445,6 @@ export default function ResultsPage() {
         </div>
       </div>
 
-      {/* Analytics Cards */}
       {analytics && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-8">
           <div className="bg-white rounded-lg border border-gray-200 p-4">
@@ -156,10 +466,9 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Score Distribution Chart */}
       {analytics && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Score Distribution</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Overall Score Distribution</h3>
           <div className="space-y-3">
             {Object.entries(analytics.distribution).map(([range, count]) => {
               const maxCount = Math.max(...Object.values(analytics.distribution));
@@ -182,7 +491,6 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Class Filter */}
       {Object.keys(byClass).length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex items-center gap-3">
@@ -203,80 +511,314 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {/* Results Table */}
-      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-        <div className="p-6 border-b border-gray-200">
-          <h3 className="text-lg font-semibold text-gray-900">
-            Submissions {selectedClass !== 'all' && `- ${selectedClass}`}
-          </h3>
-          <p className="text-sm text-gray-500 mt-1">{displayedSubmissions.length} students</p>
-        </div>
+      {selectedClass === 'all' && classResults.length > 0 && (
+        <div className="space-y-8">
+          {classResults.map((classResult) => (
+            <div key={classResult.className} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-lg font-semibold text-gray-900">{classResult.className}</h3>
+                    <p className="text-sm text-gray-500 mt-1">
+                      {classResult.analytics.totalSubmissions} students • Avg: {classResult.analytics.avgPercentage}%
+                    </p>
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={() => exportToCSV(classResult.className)} className="btn btn-outline text-xs">
+                      CSV
+                    </button>
+                    <button onClick={() => exportToExcel(classResult.className)} className="btn btn-outline text-xs">
+                      Excel
+                    </button>
+                    <button onClick={() => exportToPDF(classResult.className)} className="btn btn-outline text-xs">
+                      PDF
+                    </button>
+                    <button onClick={() => copyToClipboard(classResult.className)} className="btn btn-outline text-xs">
+                      Copy
+                    </button>
+                  </div>
+                </div>
+              </div>
 
-        {displayedSubmissions.length === 0 ? (
-          <div className="p-12 text-center">
-            <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-            <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
-            <p className="text-gray-500">Results will appear here once students submit their exams.</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-50 border-b border-gray-200">
-                <tr>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Class</th>
-                  <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Score</th>
-                  <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                  <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Submitted</th>
-                  <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {displayedSubmissions.map((sub) => {
-                  const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
-                  return (
-                    <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
-                      <td className="py-4 px-6">
-                        <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                            <span className="text-sm font-medium text-blue-700">
-                              {sub.studentName.charAt(0).toUpperCase()}
-                            </span>
+              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
+                <div className="space-y-2">
+                  {Object.entries(classResult.analytics.distribution).map(([range, count]) => {
+                    const maxCount = Math.max(...Object.values(classResult.analytics.distribution));
+                    const widthPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+                    return (
+                      <div key={range} className="flex items-center gap-3">
+                        <div className="w-16 text-xs text-gray-600 text-right">{range}%</div>
+                        <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
+                          <div
+                            className={`h-full ${getBarColor(range)} flex items-center justify-end px-2 transition-all`}
+                            style={{ width: `${widthPercent}%` }}
+                          >
+                            {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
                           </div>
-                          <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
                         </div>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-600">{sub.classGroup || 'No Class'}</td>
-                      <td className="py-4 px-6 text-center">
-                        <span className="text-sm font-medium text-gray-900">
-                          {sub.score}/{sub.maxScore}
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
-                          {percentage}%
-                        </span>
-                      </td>
-                      <td className="py-4 px-6 text-sm text-gray-500">
-                        {new Date(sub.submittedAt).toLocaleString()}
-                      </td>
-                      <td className="py-4 px-6 text-center">
-                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                        }`}>
-                          {sub.isGraded ? 'Graded' : 'Pending'}
-                        </span>
-                      </td>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-50 border-b border-gray-200">
+                    <tr>
+                      <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student</th>
+                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Score</th>
+                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                      <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Submitted</th>
+                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Status</th>
+                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Detail</th>
                     </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+                  </thead>
+                  <tbody className="divide-y divide-gray-100">
+                    {classResult.submissions.map((sub) => {
+                      const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
+                      return (
+                        <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-sm font-medium text-blue-700">
+                                  {sub.studentName.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
+                            </div>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className="text-sm font-medium text-gray-900">
+                              {sub.score}/{sub.maxScore}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
+                              {percentage}%
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-sm text-gray-500">
+                            {new Date(sub.submittedAt).toLocaleString()}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {sub.isGraded ? 'Graded' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <button
+                              onClick={() => openStudentDetail(sub._id)}
+                              className="text-sm text-blue-600 hover:text-blue-800"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {(selectedClass !== 'all' || classResults.length === 0) && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+          <div className="p-6 border-b border-gray-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-gray-900">
+                  Submissions {selectedClass !== 'all' && `- ${selectedClass}`}
+                </h3>
+                <p className="text-sm text-gray-500 mt-1">{displayedSubmissions.length} students</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => exportToCSV(selectedClass)} className="btn btn-outline text-xs">
+                  CSV
+                </button>
+                <button onClick={() => exportToExcel(selectedClass)} className="btn btn-outline text-xs">
+                  Excel
+                </button>
+                <button onClick={() => exportToPDF(selectedClass)} className="btn btn-outline text-xs">
+                  PDF
+                </button>
+                <button onClick={() => copyToClipboard(selectedClass)} className="btn btn-outline text-xs">
+                  Copy
+                </button>
+              </div>
+            </div>
           </div>
-        )}
-      </div>
+
+          {displayedSubmissions.length === 0 ? (
+            <div className="p-12 text-center">
+              <svg className="w-16 h-16 text-gray-300 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2-2v-5z" />
+              </svg>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">No submissions yet</h3>
+              <p className="text-gray-500">Results will appear here once students submit their exams.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-50 border-b border-gray-200">
+                  <tr>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Class</th>
+                    <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Score</th>
+                    <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Submitted</th>
+                    <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Status</th>
+                    <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Detail</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {displayedSubmissions.map((sub) => {
+                    const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
+                    return (
+                      <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
+                        <td className="py-4 px-6">
+                          <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                              <span className="text-sm font-medium text-blue-700">
+                                {sub.studentName.charAt(0).toUpperCase()}
+                              </span>
+                            </div>
+                            <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
+                          </div>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-gray-600">{sub.classGroup || 'No Class'}</td>
+                        <td className="py-4 px-6 text-center">
+                          <span className="text-sm font-medium text-gray-900">
+                            {sub.score}/{sub.maxScore}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
+                            {percentage}%
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-sm text-gray-500">
+                          {new Date(sub.submittedAt).toLocaleString()}
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                            sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                          }`}>
+                            {sub.isGraded ? 'Graded' : 'Pending'}
+                          </span>
+                        </td>
+                        <td className="py-4 px-6 text-center">
+                          <button
+                            onClick={() => openStudentDetail(sub._id)}
+                            className="text-sm text-blue-600 hover:text-blue-800"
+                          >
+                            View
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
+      {studentDetailOpen && selectedStudent && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+          <div className="bg-white rounded-2xl shadow-xl max-w-3xl w-full max-h-[90vh] overflow-y-auto">
+            <div className="p-6 border-b border-gray-200 flex items-center justify-between">
+              <div>
+                <h2 className="text-xl font-bold text-gray-900">Student Result</h2>
+                <p className="text-sm text-gray-500 mt-1">{selectedStudent.studentName} • {selectedStudent.classGroup || 'No Class'}</p>
+              </div>
+              <div className="flex gap-2">
+                <button onClick={() => copyToClipboard(undefined, true)} className="btn btn-outline text-xs">
+                  Copy
+                </button>
+                <button onClick={() => exportToPDF(undefined, true)} className="btn btn-outline text-xs">
+                  PDF
+                </button>
+                <button onClick={closeStudentDetail} className="btn btn-outline text-xs">
+                  Close
+                </button>
+              </div>
+            </div>
+
+            <div className="p-6">
+              <div className="grid grid-cols-3 gap-4 mb-6">
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Score</p>
+                  <p className="text-2xl font-bold text-gray-900">{selectedStudent.score}/{selectedStudent.maxScore}</p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Percentage</p>
+                  <p className="text-2xl font-bold text-gray-900">
+                    {selectedStudent.maxScore > 0 ? Math.round((selectedStudent.score / selectedStudent.maxScore) * 100) : 0}%
+                  </p>
+                </div>
+                <div className="bg-gray-50 rounded-lg p-4">
+                  <p className="text-xs text-gray-500 mb-1">Submitted</p>
+                  <p className="text-sm font-medium text-gray-900">{new Date(selectedStudent.submittedAt).toLocaleString()}</p>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <h3 className="text-lg font-semibold text-gray-900">Answer Breakdown</h3>
+                {(selectedStudent.answers?.length ?? 0) === 0 ? (
+                  <p className="text-gray-500">No answers available.</p>
+                ) : (
+                  <div className="space-y-3">
+                    {selectedStudent.answers!.map((a: any, idx: number) => {
+                      const q = a.question;
+                      return (
+                        <div key={a.questionId} className="bg-gray-50 rounded-lg p-4">
+                          <div className="flex items-start justify-between mb-2">
+                            <p className="text-sm font-medium text-gray-900">Question {idx + 1}</p>
+                            <span className="text-sm font-medium text-gray-700">{a.pointsAwarded}/{q?.points ?? a.pointsAwarded} pts</span>
+                          </div>
+                          <p className="text-sm text-gray-700 mb-3">{q?.questionText || 'Question'}</p>
+
+                          {q?.type === 'mcq' && q.options?.length > 0 && (
+                            <div className="text-xs space-y-1">
+                              <p className={`${a.isCorrect ? 'text-green-600' : 'text-red-600'}`}>Your answer: {a.answer}</p>
+                              {!a.isCorrect && <p className="text-green-600">Correct answer: {q.correctAnswer}</p>}
+                            </div>
+                          )}
+
+                          {(q?.type === 'true_false' || q?.type === 'fill_blank') && (
+                            <div className="text-xs space-y-1">
+                              <p className={`${a.isCorrect ? 'text-green-600' : 'text-red-600'}`}>Your answer: {a.answer || '(No answer)'}</p>
+                              {!a.isCorrect && <p className="text-green-600">Correct answer: {q.correctAnswer}</p>}
+                            </div>
+                          )}
+
+                          {(q?.type === 'essay' || q?.type === 'short_answer') && (
+                            <div className="text-xs space-y-1">
+                              <p className="text-gray-600">Your answer: {a.answer || '(No answer)'}</p>
+                              {a.matchedKeywords?.length > 0 && (
+                                <p className="text-green-600">Matched keywords: {a.matchedKeywords.join(', ')}</p>
+                              )}
+                              {a.feedback && <p className="text-blue-600">{a.feedback}</p>}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

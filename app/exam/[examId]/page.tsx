@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import toast from 'react-hot-toast';
@@ -20,6 +20,27 @@ interface ExamData {
   format: string;
   durationMinutes: number;
   showResults: boolean;
+  classes: string[];
+  availabilityType: string;
+  lateSubmissionPolicy: string;
+  maxAttempts: number;
+  oneDeviceOnly: boolean;
+  randomizeQuestions: boolean;
+  randomizeOptions: boolean;
+  shuffleStudents: boolean;
+  showTimer: boolean;
+  autoSubmit: boolean;
+  preventCopyPaste: boolean;
+  requireFullscreen: boolean;
+  showScoreImmediately: boolean;
+  showCorrectAnswers: boolean;
+  showExplanations: boolean;
+  hideResults: boolean;
+  releaseResultsLater: boolean;
+  releaseDate: string | null;
+  certificateAfterCompletion: boolean;
+  startTime: string;
+  endTime: string;
 }
 
 interface StudentData {
@@ -42,6 +63,7 @@ export default function ExamPage() {
   const [timeLeft, setTimeLeft] = useState(0);
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<any>(null);
+  const [attemptError, setAttemptError] = useState<string | null>(null);
 
   const formatTime = (seconds: number) => {
     const m = Math.floor(seconds / 60);
@@ -49,18 +71,50 @@ export default function ExamPage() {
     return `${m}:${s.toString().padStart(2, '0')}`;
   };
 
+  const shuffleArray = <T,>(array: T[]): T[] => {
+    const shuffled = [...array];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled;
+  };
+
+  const processedQuestions = useMemo(() => {
+    if (!questions.length) return [];
+    let qs = [...questions];
+    if (exam?.randomizeQuestions) {
+      qs = shuffleArray(qs);
+    }
+    if (exam?.randomizeOptions) {
+      qs = qs.map(q => {
+        if (q.type === 'mcq' && q.options.length > 0) {
+          const shuffledOpts = shuffleArray(q.options);
+          return { ...q, options: shuffledOpts };
+        }
+        return q;
+      });
+    }
+    return qs;
+  }, [questions, exam?.randomizeQuestions, exam?.randomizeOptions]);
+
   const handleAnswer = (questionId: string, answer: string) => {
     setAnswers((prev) => ({ ...prev, [questionId]: answer }));
   };
 
   const handleSubmit = async () => {
     if (submitting) return;
-    // Don't submit if student data isn't loaded yet
     if (!student || !student.surname || !student.firstName) {
       toast.error('Student information not loaded. Please wait...');
-      setSubmitting(false);
       return;
     }
+
+    const isLate = new Date() > new Date(exam!.endTime);
+    if (isLate && exam?.lateSubmissionPolicy === 'reject') {
+      toast.error('Late submissions are not accepted for this exam.');
+      return;
+    }
+
     setSubmitting(true);
 
     try {
@@ -108,15 +162,41 @@ export default function ExamPage() {
       return;
     }
 
-    setExam(JSON.parse(examData));
-    setQuestions(JSON.parse(examQuestions));
-    setStudent(JSON.parse(examStudent));
-    setTimeLeft((JSON.parse(examData) as ExamData).durationMinutes * 60);
+    const parsedExam = JSON.parse(examData) as ExamData;
+    const parsedQuestions = JSON.parse(examQuestions);
+    const parsedStudent = JSON.parse(examStudent);
+
+    if (parsedExam.hideResults) {
+      parsedExam.showResults = false;
+    } else if (parsedExam.showScoreImmediately) {
+      parsedExam.showResults = true;
+    }
+
+    setExam(parsedExam);
+    setQuestions(parsedQuestions);
+    setStudent(parsedStudent);
+    setTimeLeft(parsedExam.durationMinutes * 60);
     setLoading(false);
+
+    if (parsedExam.maxAttempts && parsedExam.maxAttempts <= 0) {
+      setAttemptError('You have already used all allowed attempts for this exam.');
+      return;
+    }
+
+    if (parsedExam.requireFullscreen) {
+      const goFullscreen = async () => {
+        try {
+          await document.documentElement.requestFullscreen();
+        } catch (e) {
+          console.warn('Fullscreen not supported or blocked');
+        }
+      };
+      goFullscreen();
+    }
   }, [examId, router]);
 
   useEffect(() => {
-    if (!examId) return;
+    if (!examId || !exam) return;
     const saved = localStorage.getItem(`exam_${examId}_answers`);
     if (saved) {
       try {
@@ -126,7 +206,7 @@ export default function ExamPage() {
         // ignore
       }
     }
-  }, [examId]);
+  }, [examId, exam]);
 
   const saveToLocalStorage = useCallback(() => {
     if (Object.keys(answers).length > 0) {
@@ -141,9 +221,15 @@ export default function ExamPage() {
   }, [saveToLocalStorage]);
 
   useEffect(() => {
+    if (!exam?.showTimer) return;
     if (timeLeft <= 0) {
-      // Only auto-submit if student data is loaded
-      if (!submitting && student) handleSubmit();
+      if (!submitting && student) {
+        if (exam.autoSubmit) {
+          handleSubmit();
+        } else {
+          toast.error('Time is up!');
+        }
+      }
       return;
     }
 
@@ -152,7 +238,33 @@ export default function ExamPage() {
     }, 1000);
 
     return () => clearInterval(timer);
-  }, [timeLeft, submitting, student]);
+  }, [timeLeft, submitting, student, exam?.showTimer, exam?.autoSubmit]);
+
+  useEffect(() => {
+    if (!exam?.preventCopyPaste) return;
+
+    const prevent = (e: ClipboardEvent) => {
+      e.preventDefault();
+    };
+
+    const preventKeys = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && ['c', 'v', 'x'].includes(e.key)) {
+        e.preventDefault();
+      }
+    };
+
+    document.addEventListener('paste', prevent);
+    document.addEventListener('copy', prevent);
+    document.addEventListener('cut', prevent);
+    document.addEventListener('keydown', preventKeys);
+
+    return () => {
+      document.removeEventListener('paste', prevent);
+      document.removeEventListener('copy', prevent);
+      document.removeEventListener('cut', prevent);
+      document.removeEventListener('keydown', preventKeys);
+    };
+  }, [exam?.preventCopyPaste]);
 
   const answeredCount = Object.keys(answers).length;
 
@@ -164,7 +276,22 @@ export default function ExamPage() {
     );
   }
 
+  if (attemptError) {
+    return (
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">
+          <div className="text-center">
+            <h1 className="text-3xl font-bold text-gray-900 mb-2">Access Denied</h1>
+            <p className="text-gray-600">{attemptError}</p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   if (result) {
+    const isLate = new Date() > new Date(exam!.endTime);
+
     return (
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <div className="bg-white rounded-2xl shadow-xl p-8 max-w-2xl w-full">
@@ -176,6 +303,9 @@ export default function ExamPage() {
             </div>
             <h1 className="text-3xl font-bold text-gray-900 mb-2">Exam Submitted!</h1>
             <p className="text-gray-600">{exam?.title}</p>
+            {isLate && exam?.lateSubmissionPolicy === 'accept_penalty' && (
+              <p className="text-sm text-yellow-600 mt-2">Late submission - penalty may apply</p>
+            )}
           </div>
 
           {result.showResults ? (
@@ -209,10 +339,12 @@ export default function ExamPage() {
                     ) : (
                       <div className="text-xs space-y-1">
                         <p className="text-gray-600">Your answer: {q.studentAnswer || '(No answer)'}</p>
-                        {q.matchedKeywords?.length > 0 && (
+                        {q.matchedKeywords?.length > 0 && exam?.showCorrectAnswers && (
                           <p className="text-green-600">Matched keywords: {q.matchedKeywords.join(', ')}</p>
                         )}
-                        <p className="text-blue-600">{q.feedback}</p>
+                        {exam?.showExplanations && (
+                          <p className="text-blue-600">{q.feedback}</p>
+                        )}
                       </div>
                     )}
                   </div>
@@ -234,7 +366,7 @@ export default function ExamPage() {
     );
   }
 
-  const currentQuestion = questions[currentQuestionIndex];
+  const currentQuestion = processedQuestions[currentQuestionIndex];
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -245,9 +377,11 @@ export default function ExamPage() {
             <p className="text-xs text-gray-500">{answeredCount}/{questions.length} answered</p>
           </div>
           <div className="flex items-center gap-4">
-            <div className={`text-lg font-mono font-bold ${timeLeft < 60 ? 'text-red-600' : 'text-gray-900'}`}>
-              {formatTime(timeLeft)}
-            </div>
+            {exam?.showTimer && (
+              <div className={`text-lg font-mono font-bold ${timeLeft < 60 ? 'text-red-600' : 'text-gray-900'}`}>
+                {formatTime(timeLeft)}
+              </div>
+            )}
             <button onClick={handleSubmit} disabled={submitting} className="btn btn-primary text-sm">
               {submitting ? 'Submitting...' : 'Submit Exam'}
             </button>
@@ -261,7 +395,7 @@ export default function ExamPage() {
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-24">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Questions</h3>
               <div className="grid grid-cols-5 gap-2">
-                {questions.map((q, i) => (
+                {processedQuestions.map((q, i) => (
                   <button
                     key={q.id}
                     onClick={() => setCurrentQuestionIndex(i)}
@@ -376,8 +510,8 @@ export default function ExamPage() {
                     Previous
                   </button>
                   <button
-                    onClick={() => setCurrentQuestionIndex(Math.min(questions.length - 1, currentQuestionIndex + 1))}
-                    disabled={currentQuestionIndex === questions.length - 1}
+                    onClick={() => setCurrentQuestionIndex(Math.min(processedQuestions.length - 1, currentQuestionIndex + 1))}
+                    disabled={currentQuestionIndex === processedQuestions.length - 1}
                     className="btn btn-outline"
                   >
                     Next

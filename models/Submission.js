@@ -71,6 +71,10 @@ const submissionSchema = new mongoose.Schema(
 submissionSchema.index({ examId: 1, submittedAt: -1 });
 submissionSchema.index({ examId: 1, studentName: 1 });
 
+// Prevent duplicate submissions per student per exam
+// Includes classGroup so same-name students in different classes are treated as different students
+submissionSchema.index({ examId: 1, studentName: 1, classGroup: 1 }, { unique: true });
+
 const Submission =
   mongoose.models.Submission || mongoose.model('Submission', submissionSchema);
 

@@ -20,6 +20,26 @@ const examSchema = new mongoose.Schema(
       maxlength: [500, 'Description cannot be more than 500 characters'],
       default: '',
     },
+    subject: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    academicYear: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    term: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    department: {
+      type: String,
+      trim: true,
+      default: '',
+    },
     durationMinutes: {
       type: Number,
       required: [true, 'Please provide exam duration'],
@@ -33,6 +53,10 @@ const examSchema = new mongoose.Schema(
     endTime: {
       type: Date,
       required: [true, 'Please provide exam end time'],
+    },
+    timezone: {
+      type: String,
+      default: 'UTC',
     },
     passkey: {
       type: String,
@@ -70,6 +94,88 @@ const examSchema = new mongoose.Schema(
     },
     draftQuestions: [{ type: Object }],
     draftSavedAt: Date,
+
+    // Step 2: Availability settings
+    availabilityType: {
+      type: String,
+      enum: ['anytime', 'scheduled'],
+      default: 'anytime',
+    },
+    lateSubmissionPolicy: {
+      type: String,
+      enum: ['reject', 'accept_penalty', 'accept'],
+      default: 'reject',
+    },
+
+    // Step 3: Access & Security settings
+    maxAttempts: {
+      type: Number,
+      default: 1,
+      min: [1, 'Max attempts must be at least 1'],
+      max: [10, 'Max attempts cannot exceed 10'],
+    },
+    oneDeviceOnly: {
+      type: Boolean,
+      default: false,
+    },
+    randomizeQuestions: {
+      type: Boolean,
+      default: false,
+    },
+    randomizeOptions: {
+      type: Boolean,
+      default: false,
+    },
+    shuffleStudents: {
+      type: Boolean,
+      default: false,
+    },
+    showTimer: {
+      type: Boolean,
+      default: true,
+    },
+    autoSubmit: {
+      type: Boolean,
+      default: true,
+    },
+    preventCopyPaste: {
+      type: Boolean,
+      default: true,
+    },
+    requireFullscreen: {
+      type: Boolean,
+      default: true,
+    },
+
+    // Step 4: Results settings
+    showScoreImmediately: {
+      type: Boolean,
+      default: false,
+    },
+    showCorrectAnswers: {
+      type: Boolean,
+      default: false,
+    },
+    showExplanations: {
+      type: Boolean,
+      default: false,
+    },
+    hideResults: {
+      type: Boolean,
+      default: true,
+    },
+    releaseResultsLater: {
+      type: Boolean,
+      default: false,
+    },
+    releaseDate: {
+      type: Date,
+      default: null,
+    },
+    certificateAfterCompletion: {
+      type: Boolean,
+      default: false,
+    },
   },
   {
     timestamps: true,
