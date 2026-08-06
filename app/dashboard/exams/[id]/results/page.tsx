@@ -512,119 +512,89 @@ export default function ResultsPage() {
       )}
 
       {selectedClass === 'all' && classResults.length > 0 && (
-        <div className="space-y-8">
-          {classResults.map((classResult) => (
-            <div key={classResult.className} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-              <div className="p-6 border-b border-gray-200">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-gray-900">{classResult.className}</h3>
-                    <p className="text-sm text-gray-500 mt-1">
-                      {classResult.analytics.totalSubmissions} students • Avg: {classResult.analytics.avgPercentage}%
-                    </p>
-                  </div>
-                  <div className="flex gap-2">
-                    <button onClick={() => exportToCSV(classResult.className)} className="btn btn-outline text-xs">
-                      CSV
-                    </button>
-                    <button onClick={() => exportToExcel(classResult.className)} className="btn btn-outline text-xs">
-                      Excel
-                    </button>
-                    <button onClick={() => exportToPDF(classResult.className)} className="btn btn-outline text-xs">
-                      PDF
-                    </button>
-                    <button onClick={() => copyToClipboard(classResult.className)} className="btn btn-outline text-xs">
-                      Copy
-                    </button>
-                  </div>
-                </div>
-              </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {classResults.map((classResult) => {
+            const topStudents = [...classResult.submissions]
+              .sort((a, b) => (b.score / b.maxScore) - (a.score / a.maxScore))
+              .slice(0, 3);
 
-              <div className="px-6 py-4 bg-gray-50 border-b border-gray-200">
-                <div className="space-y-2">
-                  {Object.entries(classResult.analytics.distribution).map(([range, count]) => {
-                    const maxCount = Math.max(...Object.values(classResult.analytics.distribution));
-                    const widthPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
-                    return (
-                      <div key={range} className="flex items-center gap-3">
-                        <div className="w-16 text-xs text-gray-600 text-right">{range}%</div>
-                        <div className="flex-1 bg-gray-200 rounded-full h-4 overflow-hidden">
-                          <div
-                            className={`h-full ${getBarColor(range)} flex items-center justify-end px-2 transition-all`}
-                            style={{ width: `${widthPercent}%` }}
-                          >
-                            {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
+            return (
+              <div
+                key={classResult.className}
+                className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow aspect-square flex flex-col"
+              >
+                <div className="flex-1 flex flex-col">
+                  <div className="flex items-start justify-between mb-3">
+                    <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {classResult.className}
+                    </span>
+                    <span className="text-xs text-gray-500">
+                      {classResult.analytics.totalSubmissions} students
+                    </span>
+                  </div>
+
+                  <h3 className="text-lg font-semibold text-gray-900 mb-2">
+                    {classResult.className}
+                  </h3>
+
+                  <div className="space-y-2 text-sm text-gray-600 mb-4">
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                      </svg>
+                      <span>Avg: {classResult.analytics.avgPercentage}%</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                      </svg>
+                      <span>Avg Score: {classResult.analytics.avgScore} pts</span>
+                    </div>
+                  </div>
+
+                  <div className="mb-4">
+                    <p className="text-xs font-medium text-gray-700 mb-2">Top Students:</p>
+                    <div className="space-y-1">
+                      {topStudents.map((student, idx) => {
+                        const pct = student.maxScore > 0 ? Math.round((student.score / student.maxScore) * 100) : 0;
+                        return (
+                          <div key={student._id} className="flex items-center justify-between text-xs">
+                            <span className="text-gray-600 truncate flex-1">
+                              {idx + 1}. {student.studentName}
+                            </span>
+                            <span className={`ml-2 font-medium ${getPercentageColor(pct)}`}>
+                              {pct}%
+                            </span>
                           </div>
-                        </div>
-                      </div>
-                    );
-                  })}
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="flex gap-2 pt-4 border-t border-gray-100">
+                  <button
+                    onClick={() => exportToCSV(classResult.className)}
+                    className="flex-1 btn btn-outline text-xs py-2"
+                  >
+                    CSV
+                  </button>
+                  <button
+                    onClick={() => exportToPDF(classResult.className)}
+                    className="flex-1 btn btn-outline text-xs py-2"
+                  >
+                    PDF
+                  </button>
+                  <button
+                    onClick={() => copyToClipboard(classResult.className)}
+                    className="flex-1 btn btn-outline text-xs py-2"
+                  >
+                    Copy
+                  </button>
                 </div>
               </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50 border-b border-gray-200">
-                    <tr>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student</th>
-                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Score</th>
-                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Percentage</th>
-                      <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Submitted</th>
-                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Status</th>
-                      <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Detail</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {classResult.submissions.map((sub) => {
-                      const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
-                      return (
-                        <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
-                          <td className="py-4 px-6">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                                <span className="text-sm font-medium text-blue-700">
-                                  {sub.studentName.charAt(0).toUpperCase()}
-                                </span>
-                              </div>
-                              <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
-                            </div>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <span className="text-sm font-medium text-gray-900">
-                              {sub.score}/{sub.maxScore}
-                            </span>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
-                              {percentage}%
-                            </span>
-                          </td>
-                          <td className="py-4 px-6 text-sm text-gray-500">
-                            {new Date(sub.submittedAt).toLocaleString()}
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                              sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                            }`}>
-                              {sub.isGraded ? 'Graded' : 'Pending'}
-                            </span>
-                          </td>
-                          <td className="py-4 px-6 text-center">
-                            <button
-                              onClick={() => openStudentDetail(sub._id)}
-                              className="text-sm text-blue-600 hover:text-blue-800"
-                            >
-                              View
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 

@@ -150,85 +150,81 @@ export default function TeacherExamsPage() {
           </Link>
         </div>
       ) : (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead>
-                <tr className="text-left text-sm text-gray-500 border-b border-gray-200 bg-gray-50">
-                  <th className="px-6 py-4 font-medium">Title</th>
-                  <th className="px-6 py-4 font-medium">Format</th>
-                  <th className="px-6 py-4 font-medium">Duration</th>
-                  <th className="px-6 py-4 font-medium">Status</th>
-                  <th className="px-6 py-4 font-medium">Submissions</th>
-                  <th className="px-6 py-4 font-medium">Payment</th>
-                  <th className="px-6 py-4 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {exams.map((exam, index) => (
-                  <tr
-                    key={exam._id}
-                    className={`border-b border-gray-100 ${
-                      index % 2 === 0 ? 'bg-white' : 'bg-gray-50'
-                    }`}
-                  >
-                    <td className="px-6 py-4 text-sm font-medium text-gray-900">
-                      {exam.title}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
-                        {exam.format}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-600">
-                      {exam.durationMinutes} min
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(exam.status)}`}>
-                        {exam.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-900">
-                      {exam.submissionCount}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      {exam.isPaid ? (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                          Paid
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
-                          Pending
-                        </span>
-                      )}
-                    </td>
-                    <td className="px-6 py-4 text-sm">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => router.push(`/dashboard/exams/${exam._id}/results`)}
-                          className="text-blue-600 hover:text-blue-800 font-medium"
-                        >
-                          View Results
-                        </button>
-                        <button
-                          onClick={() => handleEdit(exam)}
-                          className="text-gray-600 hover:text-gray-800 font-medium"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(exam._id)}
-                          className="text-red-600 hover:text-red-800 font-medium"
-                        >
-                          Delete
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          {exams.map((exam) => (
+            <div
+              key={exam._id}
+              className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 hover:shadow-md transition-shadow aspect-square flex flex-col"
+            >
+              <div className="flex-1 flex flex-col">
+                <div className="flex items-start justify-between mb-3">
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${statusBadge(exam.status)}`}>
+                    {exam.status}
+                  </span>
+                  <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 uppercase">
+                    {exam.format}
+                  </span>
+                </div>
+                
+                <h3 className="text-lg font-semibold text-gray-900 mb-2 line-clamp-2 flex-1">
+                  {exam.title}
+                </h3>
+                
+                <div className="space-y-2 text-sm text-gray-600 mb-4">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span>{exam.durationMinutes} minutes</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2-2v-5z" />
+                    </svg>
+                    <span>{exam.submissionCount} submissions</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {exam.isPaid ? (
+                      <>
+                        <svg className="w-4 h-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                        <span className="text-green-600">Paid</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-4 h-4 text-yellow-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        <span className="text-yellow-600">Payment Pending</span>
+                      </>
+                    )}
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex gap-2 pt-4 border-t border-gray-100">
+                <button
+                  onClick={() => router.push(`/dashboard/exams/${exam._id}/results`)}
+                  className="flex-1 btn btn-outline text-xs py-2"
+                >
+                  Results
+                </button>
+                <button
+                  onClick={() => handleEdit(exam)}
+                  className="flex-1 btn btn-outline text-xs py-2"
+                >
+                  Edit
+                </button>
+                <button
+                  onClick={() => handleDelete(exam._id)}
+                  className="flex-1 btn btn-outline text-xs py-2 text-red-600 hover:text-red-700"
+                >
+                  Delete
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
