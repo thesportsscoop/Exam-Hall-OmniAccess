@@ -80,11 +80,16 @@ export default function LoginPage() {
         className: studentData.className.trim(),
       }));
 
-      // Validate passkey
+      // Validate passkey and join the exam
       const res = await fetch('/api/exam/join', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ passkey: studentData.passkey.toUpperCase() }),
+        body: JSON.stringify({
+          surname: studentData.surname.trim(),
+          firstName: studentData.firstName.trim(),
+          className: studentData.className.trim(),
+          passkey: studentData.passkey.toUpperCase(),
+        }),
       });
 
       const data = await res.json();
@@ -101,7 +106,7 @@ export default function LoginPage() {
       sessionStorage.setItem('examQuestions', JSON.stringify(data.questions));
       
       setTimeout(() => {
-        router.push(`/exam/${data.exam._id}`);
+        router.push(`/exam/${data.exam.id}`);
       }, 1000);
     } catch (error) {
       toast.error('Network error. Please try again.');
