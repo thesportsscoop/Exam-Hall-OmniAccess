@@ -134,22 +134,26 @@ export default function ResultsPage() {
   };
 
   const getTableRows = (classSubs: Submission[], includeClass = false) => {
-    const headers = ['Student Name', 'Score', 'Max Score', 'Percentage', 'Submitted At'];
-    const rows = classSubs.map((s) => [
-      s.studentName,
-      includeClass ? s.classGroup || 'No Class' : undefined,
-      s.score,
-      s.maxScore,
-      s.maxScore > 0 ? Math.round((s.score / s.maxScore) * 100) + '%' : '0%',
-      new Date(s.submittedAt).toLocaleString(),
-    ]);
+    const headers = ['Student Name', 'Score', 'Max Score', 'Percentage', 'Position', 'Submitted At', 'Status'];
+    const sortedSubs = [...classSubs].sort((a, b) => a.studentName.localeCompare(b.studentName));
+    const rows = sortedSubs.map((s, idx) => {
+      const row: any[] = [
+        s.studentName,
+        s.score,
+        s.maxScore,
+        s.maxScore > 0 ? Math.round((s.score / s.maxScore) * 100) + '%' : '0%',
+        idx + 1,
+        new Date(s.submittedAt).toLocaleString(),
+        s.isGraded ? 'Graded' : 'Pending',
+      ];
+      if (includeClass) {
+        row.splice(1, 0, s.classGroup || 'No Class');
+      }
+      return row;
+    });
 
     if (includeClass) {
-      headers.unshift('Class');
-      rows.forEach((row, idx) => {
-        const className = classSubs[idx]?.classGroup || 'No Class';
-        (row as any[]).splice(1, 0, className);
-      });
+      headers.splice(1, 0, 'Class');
     }
 
     return { headers, rows };
@@ -195,10 +199,34 @@ export default function ResultsPage() {
     const buildTable = (title: string) => {
       const style = `
         <style>
-          table { border-collapse: collapse; font-family: Arial, sans-serif; font-size: 12px; }
-          th, td { border: 1px solid #ccc; padding: 6px 10px; text-align: left; }
-          th { background: #f3f3f3; }
-          h2 { font-family: Arial, sans-serif; font-size: 16px; }
+          * { font-family: Arial, sans-serif; font-size: 11pt; }
+          h1 { font-size: 16pt; font-weight: bold; margin-bottom: 4pt; }
+          h2 { font-size: 14pt; font-weight: bold; margin-bottom: 8pt; }
+          p { font-size: 10pt; margin: 2pt 0; }
+          table { 
+            border-collapse: collapse; 
+            font-family: Arial, sans-serif; 
+            font-size: 10pt; 
+            margin-top: 10pt;
+            width: 100%;
+          }
+          th { 
+            border: 1px solid #000; 
+            padding: 6px 8px; 
+            text-align: center;
+            background-color: #4472C4; 
+            color: #ffffff; 
+            font-weight: bold;
+          }
+          td { 
+            border: 1px solid #000; 
+            padding: 5px 8px; 
+            text-align: left;
+          }
+          td:nth-child(1), td:nth-child(4), td:nth-child(5), td:nth-child(6) {
+            text-align: center;
+          }
+          tr:nth-child(even) { background-color: #f2f2f2; }
         </style>
       `;
 
@@ -206,13 +234,29 @@ export default function ResultsPage() {
       const bodyRows = rows.map((row) => `<tr>${row.map((cell) => `<td>${cell ?? ''}</td>`).join('')}</tr>`).join('');
 
       return `
-        <html>
+        <html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40">
           <head>
             <meta charset="utf-8" />
             ${style}
+            <!--[if gte mso 9]>
+            <xml>
+              <x:ExcelWorkbook>
+                <x:ExcelWorksheets>
+                  <x:ExcelWorksheet>
+                    <x:Name>Results</x:Name>
+                    <x:WorksheetOptions>
+                      <x:DisplayGridlines>1</x:DisplayGridlines>
+                    </x:WorksheetOptions>
+                  </x:ExcelWorksheet>
+                </x:ExcelWorksheets>
+              </x:ExcelWorkbook>
+            </xml>
+            <![endif]-->
           </head>
           <body>
+            <h1>Exam Results Report</h1>
             <h2>${title}</h2>
+            <p><strong>Total Students:</strong> ${subsToExport.length}</p>
             <table>
               <thead><tr>${headerRow}</tr></thead>
               <tbody>${bodyRows}</tbody>
@@ -225,12 +269,14 @@ export default function ResultsPage() {
     const title = className ? `Exam Results - ${className}` : 'Exam Results - All Classes';
     const html = buildTable(title);
 
-    const blob = new Blob([html], { type: 'application/vnd.ms-excel' });
+    const blob = new Blob(['\ufeff' + html], { type: 'application/vnd.ms-excel;charset=utf-8' });
     const url = window.URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
     link.download = `exam-results-${examId}${classLabel !== 'all' ? `-${classLabel}` : ''}.xls`;
+    document.body.appendChild(link);
     link.click();
+    document.body.removeChild(link);
     window.URL.revokeObjectURL(url);
 
     toast.success(`Excel exported for ${classLabel === 'all' ? 'all classes' : classLabel}`);
@@ -466,31 +512,6 @@ export default function ResultsPage() {
         </div>
       )}
 
-      {analytics && (
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Overall Score Distribution</h3>
-          <div className="space-y-3">
-            {Object.entries(analytics.distribution).map(([range, count]) => {
-              const maxCount = Math.max(...Object.values(analytics.distribution));
-              const widthPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
-              return (
-                <div key={range} className="flex items-center gap-3">
-                  <div className="w-16 text-xs text-gray-600 text-right">{range}%</div>
-                  <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
-                    <div
-                      className={`h-full ${getBarColor(range)} flex items-center justify-end px-2 transition-all`}
-                      style={{ width: `${widthPercent}%` }}
-                    >
-                      {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       {Object.keys(byClass).length > 0 && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-4 mb-6">
           <div className="flex items-center gap-3">
@@ -512,7 +533,7 @@ export default function ResultsPage() {
       )}
 
       {selectedClass === 'all' && classResults.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6 mb-8">
           {classResults.map((classResult) => {
             const topStudents = [...classResult.submissions]
               .sort((a, b) => (b.score / b.maxScore) - (a.score / a.maxScore))
@@ -598,6 +619,31 @@ export default function ResultsPage() {
         </div>
       )}
 
+      {analytics && selectedClass === 'all' && (
+        <div className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8">
+          <h3 className="text-lg font-semibold text-gray-900 mb-4">Overall Score Distribution</h3>
+          <div className="space-y-3">
+            {Object.entries(analytics.distribution).map(([range, count]) => {
+              const maxCount = Math.max(...Object.values(analytics.distribution));
+              const widthPercent = maxCount > 0 ? (count / maxCount) * 100 : 0;
+              return (
+                <div key={range} className="flex items-center gap-3">
+                  <div className="w-16 text-xs text-gray-600 text-right">{range}%</div>
+                  <div className="flex-1 bg-gray-100 rounded-full h-6 overflow-hidden">
+                    <div
+                      className={`h-full ${getBarColor(range)} flex items-center justify-end px-2 transition-all`}
+                      style={{ width: `${widthPercent}%` }}
+                    >
+                      {count > 0 && <span className="text-xs text-white font-medium">{count}</span>}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
       {(selectedClass !== 'all' || classResults.length === 0) && (
         <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
           <div className="p-6 border-b border-gray-200">
@@ -638,62 +684,75 @@ export default function ResultsPage() {
               <table className="w-full">
                 <thead className="bg-gray-50 border-b border-gray-200">
                   <tr>
-                    <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student</th>
+                    <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Student Name</th>
                     <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Class</th>
                     <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Score</th>
+                    <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Max Score</th>
                     <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                    <th className="text-center py-3 px-4 text-xs font-medium text-gray-500 uppercase">Position</th>
                     <th className="text-left py-3 px-6 text-xs font-medium text-gray-500 uppercase">Submitted</th>
                     <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Status</th>
                     <th className="text-center py-3 px-6 text-xs font-medium text-gray-500 uppercase">Detail</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {displayedSubmissions.map((sub) => {
-                    const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
-                    return (
-                      <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
-                        <td className="py-4 px-6">
-                          <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                              <span className="text-sm font-medium text-blue-700">
-                                {sub.studentName.charAt(0).toUpperCase()}
-                              </span>
+                  {displayedSubmissions
+                    .slice()
+                    .sort((a, b) => a.studentName.localeCompare(b.studentName))
+                    .map((sub, idx) => {
+                      const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
+                      return (
+                        <tr key={sub._id} className="hover:bg-gray-50 transition-colors">
+                          <td className="py-4 px-6">
+                            <div className="flex items-center gap-3">
+                              <div className="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                                <span className="text-sm font-medium text-blue-700">
+                                  {sub.studentName.charAt(0).toUpperCase()}
+                                </span>
+                              </div>
+                              <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
                             </div>
-                            <span className="text-sm font-medium text-gray-900">{sub.studentName}</span>
-                          </div>
-                        </td>
-                        <td className="py-4 px-6 text-sm text-gray-600">{sub.classGroup || 'No Class'}</td>
-                        <td className="py-4 px-6 text-center">
-                          <span className="text-sm font-medium text-gray-900">
-                            {sub.score}/{sub.maxScore}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
-                            {percentage}%
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-sm text-gray-500">
-                          {new Date(sub.submittedAt).toLocaleString()}
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
-                          }`}>
-                            {sub.isGraded ? 'Graded' : 'Pending'}
-                          </span>
-                        </td>
-                        <td className="py-4 px-6 text-center">
-                          <button
-                            onClick={() => openStudentDetail(sub._id)}
-                            className="text-sm text-blue-600 hover:text-blue-800"
-                          >
-                            View
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                          </td>
+                          <td className="py-4 px-6 text-sm text-gray-600">{sub.classGroup || 'No Class'}</td>
+                          <td className="py-4 px-6 text-center">
+                            <span className="text-sm font-medium text-gray-900">
+                              {sub.score}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center text-sm text-gray-600">
+                            {sub.maxScore}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${getPercentageColor(percentage)}`}>
+                              {percentage}%
+                            </span>
+                          </td>
+                          <td className="py-4 px-4 text-center">
+                            <span className="inline-flex items-center justify-center w-8 h-8 bg-blue-100 text-blue-700 rounded-full text-sm font-bold">
+                              {idx + 1}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-sm text-gray-500">
+                            {new Date(sub.submittedAt).toLocaleString()}
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              sub.isGraded ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'
+                            }`}>
+                              {sub.isGraded ? 'Graded' : 'Pending'}
+                            </span>
+                          </td>
+                          <td className="py-4 px-6 text-center">
+                            <button
+                              onClick={() => openStudentDetail(sub._id)}
+                              className="text-sm text-blue-600 hover:text-blue-800"
+                            >
+                              View
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
