@@ -176,6 +176,35 @@ const examSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+
+    // Hybrid exam sections
+    sections: [
+      {
+        name: {
+          type: String,
+          required: true,
+          trim: true,
+        },
+        type: {
+          type: String,
+          enum: ['mcq', 'essay', 'true_false', 'fill_blank', 'short_answer'],
+          required: true,
+        },
+        instructions: {
+          type: String,
+          trim: true,
+          default: '',
+        },
+        order: {
+          type: Number,
+          default: 0,
+        },
+        isActive: {
+          type: Boolean,
+          default: true,
+        },
+      },
+    ],
   },
   {
     timestamps: true,

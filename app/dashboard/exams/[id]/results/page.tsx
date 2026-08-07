@@ -135,7 +135,13 @@ export default function ResultsPage() {
 
   const getTableRows = (classSubs: Submission[], includeClass = false) => {
     const headers = ['Student Name', 'Score', 'Max Score', 'Percentage', 'Position', 'Submitted At', 'Status'];
-    const sortedSubs = [...classSubs].sort((a, b) => a.studentName.localeCompare(b.studentName));
+    // Sort by percentage descending, then by score descending for ties
+    const sortedSubs = [...classSubs].sort((a, b) => {
+      const pctA = a.maxScore > 0 ? (a.score / a.maxScore) * 100 : 0;
+      const pctB = b.maxScore > 0 ? (b.score / b.maxScore) * 100 : 0;
+      if (pctB !== pctA) return pctB - pctA;
+      return b.score - a.score;
+    });
     const rows = sortedSubs.map((s, idx) => {
       const row: any[] = [
         s.studentName,
@@ -698,7 +704,12 @@ export default function ResultsPage() {
                 <tbody className="divide-y divide-gray-100">
                   {displayedSubmissions
                     .slice()
-                    .sort((a, b) => a.studentName.localeCompare(b.studentName))
+                    .sort((a, b) => {
+                      const pctA = a.maxScore > 0 ? (a.score / a.maxScore) * 100 : 0;
+                      const pctB = b.maxScore > 0 ? (b.score / b.maxScore) * 100 : 0;
+                      if (pctB !== pctA) return pctB - pctA;
+                      return b.score - a.score;
+                    })
                     .map((sub, idx) => {
                       const percentage = sub.maxScore > 0 ? Math.round((sub.score / sub.maxScore) * 100) : 0;
                       return (

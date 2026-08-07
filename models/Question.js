@@ -47,6 +47,15 @@ const questionSchema = new mongoose.Schema(
       min: [0, 'Points must be a positive number'],
       default: 1,
     },
+    section: {
+      type: String,
+      trim: true,
+      default: '',
+    },
+    sectionOrder: {
+      type: Number,
+      default: 0,
+    },
   },
   {
     timestamps: true,

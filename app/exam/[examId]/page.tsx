@@ -11,6 +11,8 @@ interface Question {
   questionText: string;
   options: { label: string; text: string }[];
   points: number;
+  section?: string;
+  sectionOrder?: number;
 }
 
 interface ExamData {
@@ -394,19 +396,69 @@ export default function ExamPage() {
           <div className="w-64 flex-shrink-0">
             <div className="bg-white rounded-lg shadow-sm border border-gray-200 p-4 sticky top-24">
               <h3 className="text-sm font-semibold text-gray-900 mb-3">Questions</h3>
-              <div className="grid grid-cols-5 gap-2">
-                {processedQuestions.map((q, i) => (
-                  <button
-                    key={q.id}
-                    onClick={() => setCurrentQuestionIndex(i)}
-                    className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
-                      i === currentQuestionIndex ? 'bg-blue-600 text-white' : answers[q.id] ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                    }`}
-                  >
-                    {i + 1}
-                  </button>
-                ))}
+              
+              {/* Legend */}
+              <div className="mb-3 pb-3 border-b border-gray-200">
+                <p className="text-xs font-medium text-gray-700 mb-2">Legend:</p>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-green-100 border border-green-300"></div>
+                    <span className="text-xs text-gray-600">Answered</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-red-100 border border-red-300"></div>
+                    <span className="text-xs text-gray-600">Skipped</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <div className="w-4 h-4 rounded bg-blue-600"></div>
+                    <span className="text-xs text-gray-600">Current</span>
+                  </div>
+                </div>
               </div>
+              
+              {exam?.format === 'hybrid' && questions.some(q => q.section) ? (
+                <div className="space-y-3">
+                  {(() => {
+                    const sections = Array.from(new Set(questions.map(q => q.section).filter(Boolean)));
+                    return sections.map((section, idx) => {
+                      const sectionQuestions = questions.filter(q => q.section === section);
+                      const sectionIndices = sectionQuestions.map(q => processedQuestions.findIndex(pq => pq.id === q.id)).filter(i => i !== -1);
+                      return (
+                        <div key={idx}>
+                          <p className="text-xs font-medium text-gray-500 mb-1.5">{section}</p>
+                          <div className="grid grid-cols-5 gap-1.5">
+                            {sectionIndices.map((qIdx) => (
+                              <button
+                                key={qIdx}
+                                onClick={() => setCurrentQuestionIndex(qIdx)}
+                                className={`w-8 h-8 rounded text-xs font-medium transition-colors ${
+                                  qIdx === currentQuestionIndex ? 'bg-blue-600 text-white' : answers[processedQuestions[qIdx].id] ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200'
+                                }`}
+                              >
+                                {qIdx + 1}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              ) : (
+                <div className="grid grid-cols-5 gap-2">
+                  {processedQuestions.map((q, i) => (
+                    <button
+                      key={q.id}
+                      onClick={() => setCurrentQuestionIndex(i)}
+                      className={`w-10 h-10 rounded-lg text-sm font-medium transition-colors ${
+                        i === currentQuestionIndex ? 'bg-blue-600 text-white' : answers[q.id] ? 'bg-green-100 text-green-700 border border-green-300' : 'bg-red-100 text-red-700 border border-red-300 hover:bg-red-200'
+                      }`}
+                    >
+                      {i + 1}
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 

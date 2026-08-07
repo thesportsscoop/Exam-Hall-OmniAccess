@@ -24,7 +24,7 @@ export async function POST(request, { params }) {
     }
 
     const body = await request.json();
-    const { questions } = body;
+    const { questions, sections } = body;
 
     if (!questions || !Array.isArray(questions) || questions.length === 0) {
       return NextResponse.json(
@@ -33,9 +33,20 @@ export async function POST(request, { params }) {
       );
     }
 
+    // Save sections first if provided
+    if (sections && Array.isArray(sections) && sections.length > 0) {
+      try {
+        await Exam.findByIdAndUpdate(params.id, { sections });
+      } catch (sectionError) {
+        console.error('Failed to save sections:', sectionError);
+        // Continue with saving questions even if sections fail
+      }
+    }
+
     // Validate and save each question
     const savedQuestions = [];
     const errors = [];
+    let questionOrder = 0;
 
     for (let i = 0; i < questions.length; i++) {
       const q = questions[i];
@@ -82,6 +93,8 @@ export async function POST(request, { params }) {
           correctAnswer: ['mcq', 'true_false', 'fill_blank'].includes(q.type) ? (q.correctAnswer || '') : '',
           markingScheme: ['essay', 'short_answer'].includes(q.type) ? (q.markingScheme || '') : '',
           points: q.points || 1,
+          section: q.section || '',
+          sectionOrder: questionOrder++,
         });
 
         savedQuestions.push({
@@ -92,6 +105,7 @@ export async function POST(request, { params }) {
           correctAnswer: question.correctAnswer,
           markingScheme: question.markingScheme,
           points: question.points,
+          section: question.section,
         });
       } catch (createError) {
         errors.push(`Question ${i + 1}: Failed to save - ${createError.message}`);
@@ -102,7 +116,7 @@ export async function POST(request, { params }) {
     const essayCount = savedQuestions.filter(q => q.type === 'essay').length;
 
     return NextResponse.json({
-      message: `Successfully saved ${savedQuestions.length} questions`,
+      message: `Successfully saved ${savedQuestions.length} questions${sections?.length ? ` in ${sections.length} sections` : ''}`,
       questions: savedQuestions,
       errors: errors.length > 0 ? errors : undefined,
       saveInfo: {
@@ -110,6 +124,7 @@ export async function POST(request, { params }) {
         mcqCount,
         essayCount,
         errorCount: errors.length,
+        sectionsSaved: sections?.length || 0,
       }
     }, { status: 201 });
 
